@@ -260,10 +260,19 @@ button { font-family: var(--font-body); cursor: pointer; }
 .cart-info { flex: 1; min-width: 0; }
 .cart-title { font-weight: 700; font-size: 14.5px; line-height: 1.3; }
 .cart-price { font-size: 13.5px; color: var(--muted); }
+.cart-qty { display: inline-flex; align-items: center; gap: 8px; margin-top: 8px; }
+.cart-qty button {
+  width: 26px; height: 26px; border-radius: var(--r);
+  border: 1px solid var(--line-strong); background: var(--paper);
+  color: var(--ink); font-weight: 800; line-height: 1;
+}
+.cart-qty button:hover { border-color: var(--accent); color: var(--accent); }
+.cart-qty span { min-width: 16px; text-align: center; font-size: 13px; font-weight: 800; }
 .cart-x { background: none; border: none; color: var(--muted); font-size: 17px; padding: 6px; }
 .cart-x:hover { color: var(--terracotta); }
 .cart-total { display: flex; justify-content: space-between; font-size: 17px; font-weight: 800; }
 .cart-empty { text-align: center; color: var(--muted); padding: 48px 0; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.drawer-checkout:disabled { opacity: .7; cursor: wait; transform: none; box-shadow: none; }
 
 /* ============ toast ============ */
 .toast {

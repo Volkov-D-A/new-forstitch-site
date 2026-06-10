@@ -1,4 +1,4 @@
-export type CategoryId = 'all' | 'fauna' | 'people' | 'still-life' | 'landscape' | 'fantasy';
+export type CategoryId = string;
 
 export interface Category {
   id: CategoryId;
@@ -9,7 +9,7 @@ export interface Product {
   id: string;
   title: string;
   price: number;
-  cat: Exclude<CategoryId, 'all'>;
+  cat: CategoryId;
   sub: string;
   img?: string;
   ph?: string;
@@ -66,6 +66,21 @@ export interface SiteData {
   author: Author;
   blog: BlogPost[];
   howToBuy: HowToStep[];
+}
+
+export interface CartItem {
+  productId: string;
+  quantity: number;
+}
+
+export interface OrderRequest {
+  items: CartItem[];
+}
+
+export interface OrderResponse {
+  id: string;
+  checkoutUrl?: string;
+  message?: string;
 }
 
 export type FormatPrice = (price: number) => string;

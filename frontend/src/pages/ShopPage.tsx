@@ -65,10 +65,10 @@ interface ShopPageProps {
   data: SiteData;
   formatPrice: FormatPrice;
   addToCart: ProductIdHandler;
-  cart: string[];
+  isInCart: (productId: string) => boolean;
 }
 
-export function ShopPage({ data, formatPrice, addToCart, cart }: ShopPageProps) {
+export function ShopPage({ data, formatPrice, addToCart, isInCart }: ShopPageProps) {
   const navigate = useNavigate();
   const { categoryId = 'all' } = useParams();
   const [sort, setSort] = React.useState<ProductSort>('default');
@@ -109,7 +109,7 @@ export function ShopPage({ data, formatPrice, addToCart, cart }: ShopPageProps) 
               formatPrice={formatPrice}
               onOpen={(id: string) => navigate(productPath(id))}
               onAdd={addToCart}
-              inCart={cart.includes(product.id)}
+              inCart={isInCart(product.id)}
             />
           ))}
         </div>

@@ -26,11 +26,11 @@ interface RelatedProductsProps {
   categories: Category[];
   formatPrice: FormatPrice;
   addToCart: ProductIdHandler;
-  cart: string[];
+  isInCart: (productId: string) => boolean;
   onOpen: ProductIdHandler;
 }
 
-function RelatedProducts({ products, categories, formatPrice, addToCart, cart, onOpen }: RelatedProductsProps) {
+function RelatedProducts({ products, categories, formatPrice, addToCart, isInCart, onOpen }: RelatedProductsProps) {
   if (products.length === 0) return null;
 
   return (
@@ -48,7 +48,7 @@ function RelatedProducts({ products, categories, formatPrice, addToCart, cart, o
               formatPrice={formatPrice}
               onOpen={onOpen}
               onAdd={addToCart}
-              inCart={cart.includes(product.id)}
+              inCart={isInCart(product.id)}
             />
           ))}
         </div>
@@ -61,10 +61,10 @@ interface ProductPageProps {
   data: SiteData;
   formatPrice: FormatPrice;
   addToCart: ProductIdHandler;
-  cart: string[];
+  isInCart: (productId: string) => boolean;
 }
 
-export function ProductPage({ data, formatPrice, addToCart, cart }: ProductPageProps) {
+export function ProductPage({ data, formatPrice, addToCart, isInCart }: ProductPageProps) {
   const navigate = useNavigate();
   const { productId } = useParams();
   const product = data.products.find((item) => item.id === productId);
@@ -83,7 +83,7 @@ export function ProductPage({ data, formatPrice, addToCart, cart }: ProductPageP
   const relatedProducts = data.products
     .filter((item) => item.cat === product.cat && item.id !== product.id)
     .slice(0, 4);
-  const inCart = cart.includes(product.id);
+  const inCart = isInCart(product.id);
   const openProduct = (id: string) => navigate(productPath(id));
 
   return (
@@ -128,7 +128,7 @@ export function ProductPage({ data, formatPrice, addToCart, cart }: ProductPageP
         categories={data.categories}
         formatPrice={formatPrice}
         addToCart={addToCart}
-        cart={cart}
+        isInCart={isInCart}
         onOpen={openProduct}
       />
     </div>

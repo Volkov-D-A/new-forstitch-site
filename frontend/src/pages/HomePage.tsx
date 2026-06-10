@@ -23,12 +23,12 @@ interface HomePageProps {
   data: SiteData;
   formatPrice: FormatPrice;
   addToCart: ProductIdHandler;
-  cart: string[];
+  isInCart: (productId: string) => boolean;
 }
 
-export function HomePage({ variant, data, formatPrice, addToCart, cart }: HomePageProps) {
+export function HomePage({ variant, data, formatPrice, addToCart, isInCart }: HomePageProps) {
   const Hero = HERO_BY_VARIANT[variant] || HeroCozy;
-  const commonProps = { data, formatPrice, addToCart, cart };
+  const commonProps = { data, formatPrice, addToCart, isInCart };
 
   if (variant === 'Журнал') {
     return (

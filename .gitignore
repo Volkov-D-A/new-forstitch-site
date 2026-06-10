@@ -5,6 +5,9 @@ node_modules/
 dist/
 build/
 
+# Go build output
+backend/api
+
 # Vite / frontend
 frontend/node_modules/
 frontend/dist/

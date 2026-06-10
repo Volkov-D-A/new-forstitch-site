@@ -1,17 +1,25 @@
-import { blog as mockBlog } from '../mocks/blog';
-import { categories as mockCategories } from '../mocks/categories';
-import { gallery as mockGallery } from '../mocks/gallery';
-import { products as mockProducts } from '../mocks/products';
-import { author as mockAuthor, howToBuy as mockHowToBuy, testimonials as mockTestimonials } from '../mocks/siteContent';
-import type { BlogPost, Category, GalleryItem, Product, SiteData } from '../types/site';
+import type {
+  BlogPost,
+  Category,
+  GalleryItem,
+  OrderRequest,
+  OrderResponse,
+  Product,
+  SiteData,
+} from '../types/site';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL = 'http://localhost:3000/api';
 
-async function request<T>(path: string): Promise<T | null> {
-  if (!API_BASE_URL) return null;
+type SiteContentResponse = Pick<SiteData, 'author' | 'howToBuy' | 'testimonials'>;
 
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { Accept: 'application/json' },
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...init?.headers,
+    },
   });
 
   if (!response.ok) {
@@ -21,43 +29,85 @@ async function request<T>(path: string): Promise<T | null> {
   return response.json() as Promise<T>;
 }
 
+function normalizeCategory(category: Category): Category {
+  return {
+    id: String(category.id),
+    label: category.label || String(category.id),
+  };
+}
+
+function normalizeProduct(product: Product): Product {
+  return {
+    ...product,
+    id: String(product.id),
+    title: product.title || 'Схема без названия',
+    price: Number(product.price) || 0,
+    cat: String(product.cat),
+    sub: product.sub || '',
+    img: product.img || undefined,
+    isNew: Boolean(product.isNew),
+    size: product.size || '',
+    colors: product.colors || '',
+    canvas: product.canvas || '',
+  };
+}
+
 export async function getCategories(): Promise<Category[]> {
-  return (await request<Category[]>('/categories')) || mockCategories;
+  const categories = await request<Category[]>('/categories');
+  const normalized = categories.map(normalizeCategory);
+  return normalized.some((category) => category.id === 'all')
+    ? normalized
+    : [{ id: 'all', label: 'Все схемы' }, ...normalized];
 }
 
 export async function getProducts(): Promise<Product[]> {
-  return (await request<Product[]>('/products')) || mockProducts;
+  const products = await request<Product[]>('/products');
+  return products.map(normalizeProduct);
 }
 
 export async function getProduct(productId: string): Promise<Product | null> {
-  const remoteProduct = await request<Product>(`/products/${productId}`);
-  if (remoteProduct) return remoteProduct;
-  return mockProducts.find((product) => product.id === productId) || null;
+  try {
+    return normalizeProduct(await request<Product>(`/products/${productId}`));
+  } catch {
+    return null;
+  }
 }
 
 export async function getGallery(): Promise<GalleryItem[]> {
-  return (await request<GalleryItem[]>('/gallery')) || mockGallery;
+  return request<GalleryItem[]>('/gallery');
 }
 
 export async function getBlog(): Promise<BlogPost[]> {
-  return (await request<BlogPost[]>('/blog')) || mockBlog;
+  return request<BlogPost[]>('/blog');
+}
+
+export async function getSiteContent(): Promise<SiteContentResponse> {
+  return request<SiteContentResponse>('/site-content');
 }
 
 export async function getSiteData(): Promise<SiteData> {
-  const [categories, products, gallery, blog] = await Promise.all([
+  const [categories, products, gallery, blog, siteContent] = await Promise.all([
     getCategories(),
     getProducts(),
     getGallery(),
     getBlog(),
+    getSiteContent(),
   ]);
 
   return {
-    author: mockAuthor,
+    author: siteContent.author,
     blog,
     categories,
     gallery,
-    howToBuy: mockHowToBuy,
+    howToBuy: siteContent.howToBuy,
     products,
-    testimonials: mockTestimonials,
+    testimonials: siteContent.testimonials,
   };
+}
+
+export async function createOrder(order: OrderRequest): Promise<OrderResponse> {
+  return request<OrderResponse>('/orders', {
+    method: 'POST',
+    body: JSON.stringify(order),
+  });
 }

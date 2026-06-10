@@ -1,21 +1,42 @@
 import React from 'react';
 import { SImg } from './SImg';
-import type { FormatPrice, Product, ProductIdHandler } from '../types/site';
+import type { CartItem, FormatPrice, Product, ProductIdHandler } from '../types/site';
 
 interface CartDrawerProps {
-  cart: string[];
+  cart: CartItem[];
+  isCheckoutLoading: boolean;
   onClose: () => void;
+  onCheckout: () => void;
+  onQuantityChange: (productId: string, quantity: number) => void;
   onRemove: ProductIdHandler;
   onShopOpen: () => void;
   products: Product[];
   formatPrice: FormatPrice;
 }
 
-export function CartDrawer({ cart, onClose, onRemove, onShopOpen, products, formatPrice }: CartDrawerProps) {
+interface CartDrawerItem {
+  product: Product;
+  quantity: number;
+}
+
+export function CartDrawer({
+  cart,
+  formatPrice,
+  isCheckoutLoading,
+  onCheckout,
+  onClose,
+  onQuantityChange,
+  onRemove,
+  onShopOpen,
+  products,
+}: CartDrawerProps) {
   const items = cart
-    .map((id) => products.find((product) => product.id === id))
-    .filter((product): product is Product => Boolean(product));
-  const total = items.reduce((sum, product) => sum + product.price, 0);
+    .map((item) => {
+      const product = products.find((candidate) => candidate.id === item.productId);
+      return product ? { product, quantity: item.quantity } : null;
+    })
+    .filter((item): item is CartDrawerItem => Boolean(item));
+  const total = items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
 
   return (
     <React.Fragment>
@@ -34,7 +55,7 @@ export function CartDrawer({ cart, onClose, onRemove, onShopOpen, products, form
               <p>В корзине пока пусто</p>
               <button className="btn btn-outline btn-sm" onClick={onShopOpen}>Перейти в магазин</button>
             </div>
-          ) : items.map((product) => (
+          ) : items.map(({ product, quantity }) => (
             <div className="cart-row" key={product.id}>
               {product.img
                 ? <SImg className="cart-thumb" src={product.img} alt={product.title} />
@@ -42,6 +63,11 @@ export function CartDrawer({ cart, onClose, onRemove, onShopOpen, products, form
               <div className="cart-info">
                 <div className="cart-title">{product.title}</div>
                 <div className="cart-price">PDF-схема · {formatPrice(product.price)}</div>
+                <div className="cart-qty">
+                  <button onClick={() => onQuantityChange(product.id, quantity - 1)} aria-label="Уменьшить количество">−</button>
+                  <span>{quantity}</span>
+                  <button onClick={() => onQuantityChange(product.id, quantity + 1)} aria-label="Увеличить количество">+</button>
+                </div>
               </div>
               <button className="cart-x" title="Убрать" onClick={() => onRemove(product.id)}>✕</button>
             </div>
@@ -50,7 +76,9 @@ export function CartDrawer({ cart, onClose, onRemove, onShopOpen, products, form
         {items.length > 0 ? (
           <div className="drawer-foot">
             <div className="cart-total"><span>Итого</span><span>{formatPrice(total)}</span></div>
-            <button className="btn btn-primary drawer-checkout">Оформить заказ</button>
+            <button className="btn btn-primary drawer-checkout" disabled={isCheckoutLoading} onClick={onCheckout}>
+              {isCheckoutLoading ? 'Оформляем...' : 'Оформить заказ'}
+            </button>
             <p className="drawer-note">
               Схемы придут на почту сразу после оплаты
             </p>

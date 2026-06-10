@@ -34,10 +34,10 @@ interface HowToPageProps {
   data: SiteData;
   formatPrice: FormatPrice;
   addToCart: ProductIdHandler;
-  cart: string[];
+  isInCart: (productId: string) => boolean;
 }
 
-export function HowToPage({ data, formatPrice, addToCart, cart }: HowToPageProps) {
+export function HowToPage({ data, formatPrice, addToCart, isInCart }: HowToPageProps) {
   const navigate = useNavigate();
   const starters = data.products.filter((product) => product.price <= 200).slice(0, 4);
 
@@ -69,7 +69,7 @@ export function HowToPage({ data, formatPrice, addToCart, cart }: HowToPageProps
                 formatPrice={formatPrice}
                 onOpen={(id: string) => navigate(productPath(id))}
                 onAdd={addToCart}
-                inCart={cart.includes(product.id)}
+                inCart={isInCart(product.id)}
               />
             ))}
           </div>

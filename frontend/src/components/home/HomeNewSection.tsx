@@ -6,12 +6,12 @@ import type { FormatPrice, ProductIdHandler, SiteData } from '../../types/site';
 
 interface HomeNewSectionProps {
   addToCart: ProductIdHandler;
-  cart: string[];
+  isInCart: (productId: string) => boolean;
   data: SiteData;
   formatPrice: FormatPrice;
 }
 
-export function HomeNewSection({ addToCart, cart, data, formatPrice }: HomeNewSectionProps) {
+export function HomeNewSection({ addToCart, isInCart, data, formatPrice }: HomeNewSectionProps) {
   const navigate = useNavigate();
   const products = data.products.filter((product) => product.isNew);
 
@@ -34,7 +34,7 @@ export function HomeNewSection({ addToCart, cart, data, formatPrice }: HomeNewSe
               formatPrice={formatPrice}
               onOpen={(id: string) => navigate(productPath(id))}
               onAdd={addToCart}
-              inCart={cart.includes(product.id)}
+              inCart={isInCart(product.id)}
             />
           ))}
         </div>
