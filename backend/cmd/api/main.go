@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,14 +13,21 @@ import (
 	"new-forstitch-site/backend/internal/db"
 	"new-forstitch-site/backend/internal/repository"
 	"new-forstitch-site/backend/internal/services"
+	"new-forstitch-site/backend/internal/storage"
 )
 
 func main() {
 	addr := env("HTTP_ADDR", ":3000")
 	databaseURL := env("DATABASE_URL", "postgres://forstitch:forstitch@localhost:5432/forstitch?sslmode=disable")
-	adminUsername := env("ADMIN_USERNAME", "admin")
-	adminPassword := env("ADMIN_PASSWORD", "dev-admin-password")
+	adminUsername := env("ADMIN_USERNAME", "dimas")
+	adminPassword := env("ADMIN_PASSWORD", "dimas")
 	allowedOrigins := envList("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
+	minioEndpoint := env("MINIO_ENDPOINT", "localhost:9000")
+	minioAccessKey := env("MINIO_ACCESS_KEY", "forstitch")
+	minioSecretKey := env("MINIO_SECRET_KEY", "forstitch-secret")
+	minioBucket := env("MINIO_BUCKET", "forstitch")
+	minioUseSSL := envBool("MINIO_USE_SSL", false)
+	fileBaseURL := env("FILE_BASE_URL", "http://localhost:3000/api/files")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -35,6 +43,14 @@ func main() {
 
 	repo := repository.NewPostgresRepository(database)
 	service := services.New(repo)
+	fileStorage, err := storage.NewMinIO(minioEndpoint, minioAccessKey, minioSecretKey, minioBucket, minioUseSSL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := fileStorage.EnsureBucket(ctx); err != nil {
+		log.Fatal(err)
+	}
+	service.ConfigureFiles(fileStorage, fileBaseURL)
 	if err := service.EnsureAdminUser(adminUsername, adminPassword); err != nil {
 		log.Fatal(err)
 	}
@@ -70,4 +86,16 @@ func env(key, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func envBool(key string, fallback bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }

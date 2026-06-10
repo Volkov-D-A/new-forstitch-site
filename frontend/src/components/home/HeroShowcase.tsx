@@ -50,7 +50,7 @@ interface HeroShowcaseProps {
 
 export function HeroShowcase({ data, formatPrice }: HeroShowcaseProps) {
   const navigate = useNavigate();
-  const hero = findProduct(data.products, HOME_FEATURED_PRODUCT_ID);
+  const hero = findProduct(data.products, data.featuredProductId || HOME_FEATURED_PRODUCT_ID);
 
   if (!hero) {
     return <EmptyState title="Витринный товар не найден" text="Проверьте настройки главного товара в данных сайта." />;
@@ -62,7 +62,7 @@ export function HeroShowcase({ data, formatPrice }: HeroShowcaseProps) {
         <div className="heroC-bg"><SImg src={hero.img} alt="" /></div>
         <div className="wrap heroC-content">
           <p className="eyebrow heroC-eyebrow">Новинка месяца</p>
-          <h1 className="h-display">Маяк на мысе Анива</h1>
+          <h1 className="h-display">{hero.title}</h1>
           <p className="lede">
             58 цветов, градиенты неба и моря — морская серия открыта.
             Схема в PDF, доставка на почту сразу после оплаты.

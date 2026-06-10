@@ -7,7 +7,7 @@ INSERT INTO categories (id, label, sort_order) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO products (
-  id, title, price, cat, sub, img, is_new, size, colors, canvas, sort_order
+  id, title, price, cat, sub, img, size, colors, canvas, sort_order
 ) VALUES
   (
     'lighthouse_aniva',
@@ -16,7 +16,6 @@ INSERT INTO products (
     'landscape',
     'Море',
     'https://forstitch.ru/wp-content/uploads/2021/05/16-495x400.jpg',
-    true,
     '300 x 220 крестов',
     '58 цветов DMC',
     'Aida 16 / равномерка 32',
@@ -29,7 +28,6 @@ INSERT INTO products (
     'fauna',
     'Насекомые',
     'https://forstitch.ru/wp-content/uploads/2021/04/5-300x300.jpg',
-    true,
     '120 x 120 крестов',
     '32 цвета DMC',
     'Aida 14',
@@ -42,7 +40,6 @@ INSERT INTO products (
     'fantasy',
     'Драконы',
     'https://forstitch.ru/wp-content/uploads/2016/11/8SNwJDfXaw-1030x833.jpg',
-    false,
     '240 x 190 крестов',
     '52 цвета DMC',
     'Aida 16',
@@ -55,7 +52,6 @@ INSERT INTO products (
     'still-life',
     'Цветы',
     'https://forstitch.ru/wp-content/uploads/2016/11/oQrdgtvEwgs-773x1030.jpg',
-    false,
     '180 x 240 крестов',
     '46 цветов',
     'равномерка 32',

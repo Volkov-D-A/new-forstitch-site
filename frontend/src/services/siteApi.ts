@@ -10,7 +10,7 @@ import type {
 
 export const API_BASE_URL = 'http://localhost:3000/api';
 
-type SiteContentResponse = Pick<SiteData, 'author' | 'howToBuy' | 'testimonials'>;
+type SiteContentResponse = Pick<SiteData, 'author' | 'featuredProductId' | 'howToBuy' | 'testimonials'>;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -52,6 +52,19 @@ function normalizeProduct(product: Product): Product {
   };
 }
 
+function normalizeBlogPost(post: BlogPost): BlogPost {
+  return {
+    ...post,
+    id: String(post.id),
+    title: post.title || 'Запись без названия',
+    date: post.date || '',
+    tag: post.tag || '',
+    img: post.img || '',
+    excerpt: post.excerpt || '',
+    content: post.content || post.excerpt || '',
+  };
+}
+
 export async function getCategories(): Promise<Category[]> {
   const categories = await request<Category[]>('/categories');
   const normalized = categories.map(normalizeCategory);
@@ -78,7 +91,8 @@ export async function getGallery(): Promise<GalleryItem[]> {
 }
 
 export async function getBlog(): Promise<BlogPost[]> {
-  return request<BlogPost[]>('/blog');
+  const posts = await request<BlogPost[]>('/blog');
+  return posts.map(normalizeBlogPost);
 }
 
 export async function getSiteContent(): Promise<SiteContentResponse> {
@@ -98,6 +112,7 @@ export async function getSiteData(): Promise<SiteData> {
     author: siteContent.author,
     blog,
     categories,
+    featuredProductId: siteContent.featuredProductId,
     gallery,
     howToBuy: siteContent.howToBuy,
     products,

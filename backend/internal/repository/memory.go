@@ -80,11 +80,13 @@ func NewMemoryRepository() *MemoryRepository {
 		},
 		gallery: []models.GalleryItem{
 			{
+				ID:    1,
 				Img:   "https://forstitch.ru/wp-content/uploads/2021/05/16-495x400.jpg",
 				Title: "Маяк на мысе Анива",
 				By:    "Команда Forstitch",
 			},
 			{
+				ID:    2,
 				Img:   "https://forstitch.ru/wp-content/uploads/2016/11/oQrdgtvEwgs-773x1030.jpg",
 				Title: "Анемоны",
 				By:    "Команда Forstitch",
@@ -98,9 +100,11 @@ func NewMemoryRepository() *MemoryRepository {
 				Tag:     "Новости",
 				Img:     "https://forstitch.ru/wp-content/uploads/2021/05/16-495x400.jpg",
 				Excerpt: "Первые товары уже отдаются из Go API. Дальше сюда можно подключить админку и базу данных.",
+				Content: "Первые товары уже отдаются из Go API. Дальше сюда можно подключить админку и базу данных.",
 			},
 		},
 		siteContent: models.SiteContent{
+			FeaturedProductID: "lighthouse_aniva",
 			Author: models.Author{
 				Name:  "Екатерина Волкова",
 				Photo: "https://forstitch.ru/wp-content/uploads/2016/04/MG_4272-687x1030.jpg",
@@ -117,6 +121,7 @@ func NewMemoryRepository() *MemoryRepository {
 			},
 			Testimonials: []models.Testimonial{
 				{
+					ID:   1,
 					Name: "Мария",
 					Role: "Вышивальщица",
 					Img:  "https://forstitch.ru/wp-content/uploads/2021/04/5-300x300.jpg",
@@ -180,14 +185,14 @@ func (s *MemoryRepository) DeleteCategory(id string) error {
 func (s *MemoryRepository) Products() []models.Product {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return clone(s.products)
+	return markLatestProducts(clone(s.products))
 }
 
 func (s *MemoryRepository) Product(id string) (models.Product, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	for _, product := range s.products {
+	for _, product := range markLatestProducts(clone(s.products)) {
 		if product.ID == id {
 			return product, nil
 		}
@@ -221,6 +226,26 @@ func (s *MemoryRepository) UpdateProduct(id string, product models.Product) erro
 	return models.NotFound("product_not_found", "product not found")
 }
 
+func markLatestProducts(products []models.Product) []models.Product {
+	for index := range products {
+		products[index].IsNew = index >= len(products)-4
+	}
+	return products
+}
+
+func (s *MemoryRepository) UpdateProductImage(id string, imageURL string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for index, item := range s.products {
+		if item.ID == id {
+			s.products[index].Img = imageURL
+			return nil
+		}
+	}
+	return models.NotFound("product_not_found", "product not found")
+}
+
 func (s *MemoryRepository) DeleteProduct(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -240,16 +265,188 @@ func (s *MemoryRepository) Gallery() []models.GalleryItem {
 	return clone(s.gallery)
 }
 
+func (s *MemoryRepository) CreateGalleryItem(item models.GalleryItem) (models.GalleryItem, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var maxID int64
+	for _, existing := range s.gallery {
+		if existing.ID > maxID {
+			maxID = existing.ID
+		}
+	}
+	item.ID = maxID + 1
+	s.gallery = append(s.gallery, item)
+	return item, nil
+}
+
+func (s *MemoryRepository) UpdateGalleryItem(id int64, item models.GalleryItem) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for index, existing := range s.gallery {
+		if existing.ID == id {
+			item.ID = id
+			s.gallery[index] = item
+			return nil
+		}
+	}
+	return models.NotFound("gallery_item_not_found", "gallery item not found")
+}
+
+func (s *MemoryRepository) UpdateGalleryItemImage(id int64, imageURL string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for index, item := range s.gallery {
+		if item.ID == id {
+			s.gallery[index].Img = imageURL
+			return nil
+		}
+	}
+	return models.NotFound("gallery_item_not_found", "gallery item not found")
+}
+
+func (s *MemoryRepository) DeleteGalleryItem(id int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for index, item := range s.gallery {
+		if item.ID == id {
+			s.gallery = append(s.gallery[:index], s.gallery[index+1:]...)
+			return nil
+		}
+	}
+	return models.NotFound("gallery_item_not_found", "gallery item not found")
+}
+
 func (s *MemoryRepository) Blog() []models.BlogPost {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return clone(s.blog)
 }
 
+func (s *MemoryRepository) CreateBlogPost(post models.BlogPost) (models.BlogPost, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, item := range s.blog {
+		if item.ID == post.ID {
+			return models.BlogPost{}, models.Conflict("blog_post_exists", "blog post already exists")
+		}
+	}
+	s.blog = append(s.blog, post)
+	return post, nil
+}
+
+func (s *MemoryRepository) UpdateBlogPost(id string, post models.BlogPost) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for index, item := range s.blog {
+		if item.ID == id {
+			post.ID = id
+			s.blog[index] = post
+			return nil
+		}
+	}
+	return models.NotFound("blog_post_not_found", "blog post not found")
+}
+
+func (s *MemoryRepository) UpdateBlogPostImage(id string, imageURL string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for index, item := range s.blog {
+		if item.ID == id {
+			s.blog[index].Img = imageURL
+			return nil
+		}
+	}
+	return models.NotFound("blog_post_not_found", "blog post not found")
+}
+
+func (s *MemoryRepository) DeleteBlogPost(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for index, item := range s.blog {
+		if item.ID == id {
+			s.blog = append(s.blog[:index], s.blog[index+1:]...)
+			return nil
+		}
+	}
+	return models.NotFound("blog_post_not_found", "blog post not found")
+}
+
 func (s *MemoryRepository) SiteContent() models.SiteContent {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.siteContent
+}
+
+func (s *MemoryRepository) Testimonials() []models.Testimonial {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return clone(s.siteContent.Testimonials)
+}
+
+func (s *MemoryRepository) CreateTestimonial(testimonial models.Testimonial) (models.Testimonial, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var maxID int64
+	for _, item := range s.siteContent.Testimonials {
+		if item.ID > maxID {
+			maxID = item.ID
+		}
+	}
+	testimonial.ID = maxID + 1
+	s.siteContent.Testimonials = append(s.siteContent.Testimonials, testimonial)
+	return testimonial, nil
+}
+
+func (s *MemoryRepository) UpdateTestimonial(id int64, testimonial models.Testimonial) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for index, item := range s.siteContent.Testimonials {
+		if item.ID == id {
+			testimonial.ID = id
+			s.siteContent.Testimonials[index] = testimonial
+			return nil
+		}
+	}
+	return models.NotFound("testimonial_not_found", "testimonial not found")
+}
+
+func (s *MemoryRepository) UpdateTestimonialImage(id int64, imageURL string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for index, item := range s.siteContent.Testimonials {
+		if item.ID == id {
+			s.siteContent.Testimonials[index].Img = imageURL
+			return nil
+		}
+	}
+	return models.NotFound("testimonial_not_found", "testimonial not found")
+}
+
+func (s *MemoryRepository) DeleteTestimonial(id int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for index, item := range s.siteContent.Testimonials {
+		if item.ID == id {
+			s.siteContent.Testimonials = append(s.siteContent.Testimonials[:index], s.siteContent.Testimonials[index+1:]...)
+			return nil
+		}
+	}
+	return models.NotFound("testimonial_not_found", "testimonial not found")
+}
+
+func (s *MemoryRepository) UpdateSiteSettings(settings models.SiteSettings) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.siteContent.FeaturedProductID = settings.FeaturedProductID
+	return nil
 }
 
 func (s *MemoryRepository) CreateOrder(req models.OrderRequest) models.OrderResponse {

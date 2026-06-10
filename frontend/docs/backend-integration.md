@@ -47,7 +47,7 @@ POST http://localhost:3000/api/orders
     "price": 600,
     "cat": "landscape",
     "sub": "Море",
-    "img": "https://example.com/images/aniva.jpg",
+    "img": "http://localhost:3000/api/files/products/lighthouse-aniva/1780000000000000000.jpg",
     "isNew": true,
     "size": "300 x 220 крестов",
     "colors": "58 цветов DMC",
@@ -59,7 +59,8 @@ POST http://localhost:3000/api/orders
 - `id` используется в URL `/product/:productId` и в корзине.
 - `cat` должен совпадать с `categories[].id`.
 - `price` ожидается числом в рублях, форматирование делает фронтенд.
-- `img` лучше отдавать абсолютным URL; если поля нет, UI покажет placeholder.
+- `img` отдает backend после загрузки файла в админке; если поля нет, UI покажет placeholder.
+- `isNew` вычисляет backend: новинками считаются последние 4 добавленных опубликованных товара.
 
 ### `GET /products/:productId`
 
@@ -89,10 +90,13 @@ POST http://localhost:3000/api/orders
     "date": "2026-06-10",
     "tag": "Новости",
     "img": "https://example.com/blog/post.jpg",
-    "excerpt": "Короткое описание публикации."
+    "excerpt": "Короткое описание публикации.",
+    "content": "Полный текст публикации."
   }
 ]
 ```
+
+Карточки блога показывают короткий `excerpt` и ведут на `/blog/:postId`, где отображается полный `content`.
 
 ### `GET /site-content`
 
@@ -171,13 +175,13 @@ POST /auth/logout
 `POST /auth/login` принимает:
 
 ```json
-{ "username": "admin", "password": "dev-admin-password" }
+{ "username": "dimas", "password": "dimas" }
 ```
 
 Backend выставляет HttpOnly cookie `forstitch_admin_session` и возвращает CSRF-токен:
 
 ```json
-{ "username": "admin", "csrfToken": "..." }
+{ "username": "dimas", "csrfToken": "..." }
 ```
 
 Фронтенд отправляет admin-запросы с `credentials: "include"`. Для `POST`, `PUT`, `DELETE` нужен заголовок:
@@ -194,16 +198,59 @@ DELETE /admin/categories/:categoryId
 GET    /admin/products
 POST   /admin/products
 PUT    /admin/products/:productId
+POST   /admin/products/:productId/image
 DELETE /admin/products/:productId
+GET    /admin/blog
+POST   /admin/blog
+PUT    /admin/blog/:postId
+POST   /admin/blog/:postId/image
+DELETE /admin/blog/:postId
+GET    /admin/gallery
+POST   /admin/gallery
+PUT    /admin/gallery/:galleryItemId
+POST   /admin/gallery/:galleryItemId/image
+DELETE /admin/gallery/:galleryItemId
+GET    /admin/site-settings
+PUT    /admin/site-settings
+GET    /admin/testimonials
+POST   /admin/testimonials
+PUT    /admin/testimonials/:testimonialId
+POST   /admin/testimonials/:testimonialId/image
+DELETE /admin/testimonials/:testimonialId
 ```
 
 Payload для категорий:
 
 ```json
-{ "id": "flowers", "label": "Цветы" }
+{ "label": "Цветы" }
 ```
 
-Payload для товаров совпадает с элементом `GET /products`.
+При создании категорий и товаров `id` генерируется backend-ом и возвращается в ответе `POST`. Payload для товаров совпадает с элементом `GET /products`, но `id` при создании можно не передавать. Изображение товара не вводится URL вручную: админка отправляет `multipart/form-data` на `/admin/products/:productId/image` с полем `file`, а backend обновляет `img`.
+
+Настройки главной страницы:
+
+```json
+{ "featuredProductId": "lighthouse_aniva" }
+```
+
+`featuredProductId` приходит в `GET /site-content` и определяет закрепленную схему на главном экране.
+
+Отзывы вышивальщиц управляются из вкладки `Главная` в админке. Payload:
+
+```json
+{
+  "name": "Анна",
+  "role": "Вышивальщица",
+  "img": "https://example.com/avatar.jpg",
+  "text": "Очень понятная схема."
+}
+```
+
+Фото отзыва не вводится URL вручную: админка отправляет `multipart/form-data` на `/admin/testimonials/:testimonialId/image` с полем `file`, а backend обновляет `img`.
+
+Записи блога управляются из отдельной вкладки `Блог` в админке. При создании `id` генерируется backend-ом. Поле `excerpt` используется в карточке, `content` — на отдельной странице записи. Обложка не вводится URL вручную: админка отправляет `multipart/form-data` на `/admin/blog/:postId/image` с полем `file`, а backend обновляет `img`.
+
+Галерея управляется из отдельной вкладки `Галерея` в админке. Изображение не вводится URL вручную: админка отправляет `multipart/form-data` на `/admin/gallery/:galleryItemId/image` с полем `file`, а backend обновляет `img`.
 
 ## Ошибки API
 

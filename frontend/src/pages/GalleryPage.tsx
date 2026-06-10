@@ -59,7 +59,7 @@ export function GalleryPage({ data }: GalleryPageProps) {
       <div className="wrap page-content">
         <div className="masonry">
           {data.gallery.map((item, index) => (
-            <GalleryItemCard key={index} item={item} onOpen={setOpenItem} />
+            <GalleryItemCard key={item.id || index} item={item} onOpen={setOpenItem} />
           ))}
         </div>
       </div>

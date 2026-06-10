@@ -4,7 +4,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 import { CartDrawer, Footer, Header, Toast } from './components/index';
 import { useCart } from './hooks/useCart';
 import { useSiteData } from './hooks/useSiteData';
-import { AdminPage, BlogPage, GalleryPage, HomePage, HowToPage, ProductPage, ShopPage } from './pages/index';
+import { AdminPage, BlogPage, BlogPostPage, GalleryPage, HomePage, HowToPage, ProductPage, ShopPage } from './pages/index';
 import { createOrder } from './services/siteApi';
 import { formatPrice } from './utils/currency';
 import { HOME_VARIANT } from './utils/homeContent';
@@ -101,6 +101,7 @@ function PublicApp() {
           <Route path="/product/:productId" element={<ProductPage addToCart={addToCart} isInCart={isInCart} data={data} formatPrice={formatPrice} />} />
           <Route path={ROUTES.gallery} element={<GalleryPage data={data} />} />
           <Route path={ROUTES.blog} element={<BlogPage data={data} />} />
+          <Route path="/blog/:postId" element={<BlogPostPage data={data} />} />
           <Route path={ROUTES.howToBuy} element={<HowToPage addToCart={addToCart} isInCart={isInCart} data={data} formatPrice={formatPrice} />} />
           <Route path="/howto" element={<Navigate to={ROUTES.howToBuy} replace />} />
           <Route path="*" element={<Navigate to={ROUTES.home} replace />} />

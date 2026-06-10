@@ -75,7 +75,22 @@ func (s *PostgresRepository) DeleteCategory(id string) error {
 
 func (s *PostgresRepository) Products() []models.Product {
 	rows, err := s.db.QueryContext(context.Background(), `
-		SELECT id, title, price, cat, sub, img, is_new, size, colors, canvas
+		SELECT id,
+		       title,
+		       price,
+		       cat,
+		       sub,
+		       img,
+		       id IN (
+		         SELECT id
+		         FROM products
+		         WHERE published = true
+		         ORDER BY created_at DESC, id DESC
+		         LIMIT 4
+		       ) AS is_new,
+		       size,
+		       colors,
+		       canvas
 		FROM products
 		WHERE published = true
 		ORDER BY sort_order, title
@@ -98,7 +113,22 @@ func (s *PostgresRepository) Products() []models.Product {
 
 func (s *PostgresRepository) Product(id string) (models.Product, error) {
 	row := s.db.QueryRowContext(context.Background(), `
-		SELECT id, title, price, cat, sub, img, is_new, size, colors, canvas
+		SELECT id,
+		       title,
+		       price,
+		       cat,
+		       sub,
+		       img,
+		       id IN (
+		         SELECT id
+		         FROM products
+		         WHERE published = true
+		         ORDER BY created_at DESC, id DESC
+		         LIMIT 4
+		       ) AS is_new,
+		       size,
+		       colors,
+		       canvas
 		FROM products
 		WHERE id = $1 AND published = true
 	`, id)
@@ -115,9 +145,9 @@ func (s *PostgresRepository) Product(id string) (models.Product, error) {
 
 func (s *PostgresRepository) CreateProduct(product models.Product) error {
 	_, err := s.db.ExecContext(context.Background(), `
-		INSERT INTO products (id, title, price, cat, sub, img, is_new, size, colors, canvas)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, product.ID, product.Title, product.Price, product.Cat, product.Sub, product.Img, product.IsNew, product.Size, product.Colors, product.Canvas)
+		INSERT INTO products (id, title, price, cat, sub, img, size, colors, canvas)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`, product.ID, product.Title, product.Price, product.Cat, product.Sub, product.Img, product.Size, product.Colors, product.Canvas)
 	return mapPostgresError(err)
 }
 
@@ -129,13 +159,25 @@ func (s *PostgresRepository) UpdateProduct(id string, product models.Product) er
 		    cat = $4,
 		    sub = $5,
 		    img = $6,
-		    is_new = $7,
-		    size = $8,
-		    colors = $9,
-		    canvas = $10,
+		    size = $7,
+		    colors = $8,
+		    canvas = $9,
 		    updated_at = now()
 		WHERE id = $1
-	`, id, product.Title, product.Price, product.Cat, product.Sub, product.Img, product.IsNew, product.Size, product.Colors, product.Canvas)
+	`, id, product.Title, product.Price, product.Cat, product.Sub, product.Img, product.Size, product.Colors, product.Canvas)
+	if err != nil {
+		return mapPostgresError(err)
+	}
+	return requireAffected(result, "product_not_found", "product not found")
+}
+
+func (s *PostgresRepository) UpdateProductImage(id string, imageURL string) error {
+	result, err := s.db.ExecContext(context.Background(), `
+		UPDATE products
+		SET img = $2,
+		    updated_at = now()
+		WHERE id = $1
+	`, id, imageURL)
 	if err != nil {
 		return mapPostgresError(err)
 	}
@@ -155,7 +197,7 @@ func (s *PostgresRepository) DeleteProduct(id string) error {
 
 func (s *PostgresRepository) Gallery() []models.GalleryItem {
 	rows, err := s.db.QueryContext(context.Background(), `
-		SELECT img, title, by_name
+		SELECT id, img, title, by_name
 		FROM gallery_items
 		WHERE published = true
 		ORDER BY sort_order, id
@@ -168,7 +210,7 @@ func (s *PostgresRepository) Gallery() []models.GalleryItem {
 	var gallery []models.GalleryItem
 	for rows.Next() {
 		var item models.GalleryItem
-		if err := rows.Scan(&item.Img, &item.Title, &item.By); err != nil {
+		if err := rows.Scan(&item.ID, &item.Img, &item.Title, &item.By); err != nil {
 			return nil
 		}
 		gallery = append(gallery, item)
@@ -176,9 +218,58 @@ func (s *PostgresRepository) Gallery() []models.GalleryItem {
 	return gallery
 }
 
+func (s *PostgresRepository) CreateGalleryItem(item models.GalleryItem) (models.GalleryItem, error) {
+	err := s.db.QueryRowContext(context.Background(), `
+		INSERT INTO gallery_items (img, title, by_name)
+		VALUES ($1, $2, $3)
+		RETURNING id
+	`, item.Img, item.Title, item.By).Scan(&item.ID)
+	if err != nil {
+		return models.GalleryItem{}, mapPostgresError(err)
+	}
+	return item, nil
+}
+
+func (s *PostgresRepository) UpdateGalleryItem(id int64, item models.GalleryItem) error {
+	result, err := s.db.ExecContext(context.Background(), `
+		UPDATE gallery_items
+		SET img = $2,
+		    title = $3,
+		    by_name = $4
+		WHERE id = $1
+	`, id, item.Img, item.Title, item.By)
+	if err != nil {
+		return mapPostgresError(err)
+	}
+	return requireAffected(result, "gallery_item_not_found", "gallery item not found")
+}
+
+func (s *PostgresRepository) UpdateGalleryItemImage(id int64, imageURL string) error {
+	result, err := s.db.ExecContext(context.Background(), `
+		UPDATE gallery_items
+		SET img = $2
+		WHERE id = $1
+	`, id, imageURL)
+	if err != nil {
+		return mapPostgresError(err)
+	}
+	return requireAffected(result, "gallery_item_not_found", "gallery item not found")
+}
+
+func (s *PostgresRepository) DeleteGalleryItem(id int64) error {
+	result, err := s.db.ExecContext(context.Background(), `
+		DELETE FROM gallery_items
+		WHERE id = $1
+	`, id)
+	if err != nil {
+		return mapPostgresError(err)
+	}
+	return requireAffected(result, "gallery_item_not_found", "gallery item not found")
+}
+
 func (s *PostgresRepository) Blog() []models.BlogPost {
 	rows, err := s.db.QueryContext(context.Background(), `
-		SELECT id, title, post_date, tag, img, excerpt
+		SELECT id, title, post_date, tag, img, excerpt, content
 		FROM blog_posts
 		WHERE published = true
 		ORDER BY post_date DESC, id
@@ -192,7 +283,7 @@ func (s *PostgresRepository) Blog() []models.BlogPost {
 	for rows.Next() {
 		var post models.BlogPost
 		var postDate time.Time
-		if err := rows.Scan(&post.ID, &post.Title, &postDate, &post.Tag, &post.Img, &post.Excerpt); err != nil {
+		if err := rows.Scan(&post.ID, &post.Title, &postDate, &post.Tag, &post.Img, &post.Excerpt, &post.Content); err != nil {
 			return nil
 		}
 		post.Date = postDate.Format("2006-01-02")
@@ -201,10 +292,72 @@ func (s *PostgresRepository) Blog() []models.BlogPost {
 	return posts
 }
 
+func (s *PostgresRepository) CreateBlogPost(post models.BlogPost) (models.BlogPost, error) {
+	postDate, err := parsePostDate(post.Date)
+	if err != nil {
+		return models.BlogPost{}, err
+	}
+	err = s.db.QueryRowContext(context.Background(), `
+		INSERT INTO blog_posts (id, title, post_date, tag, img, excerpt, content)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING post_date
+	`, post.ID, post.Title, postDate, post.Tag, post.Img, post.Excerpt, post.Content).Scan(&postDate)
+	if err != nil {
+		return models.BlogPost{}, mapPostgresError(err)
+	}
+	post.Date = postDate.Format("2006-01-02")
+	return post, nil
+}
+
+func (s *PostgresRepository) UpdateBlogPost(id string, post models.BlogPost) error {
+	postDate, err := parsePostDate(post.Date)
+	if err != nil {
+		return err
+	}
+	result, err := s.db.ExecContext(context.Background(), `
+		UPDATE blog_posts
+		SET title = $2,
+		    post_date = $3,
+		    tag = $4,
+		    img = $5,
+		    excerpt = $6,
+		    content = $7
+		WHERE id = $1
+	`, id, post.Title, postDate, post.Tag, post.Img, post.Excerpt, post.Content)
+	if err != nil {
+		return mapPostgresError(err)
+	}
+	return requireAffected(result, "blog_post_not_found", "blog post not found")
+}
+
+func (s *PostgresRepository) UpdateBlogPostImage(id string, imageURL string) error {
+	result, err := s.db.ExecContext(context.Background(), `
+		UPDATE blog_posts
+		SET img = $2
+		WHERE id = $1
+	`, id, imageURL)
+	if err != nil {
+		return mapPostgresError(err)
+	}
+	return requireAffected(result, "blog_post_not_found", "blog post not found")
+}
+
+func (s *PostgresRepository) DeleteBlogPost(id string) error {
+	result, err := s.db.ExecContext(context.Background(), `
+		DELETE FROM blog_posts
+		WHERE id = $1
+	`, id)
+	if err != nil {
+		return mapPostgresError(err)
+	}
+	return requireAffected(result, "blog_post_not_found", "blog post not found")
+}
+
 func (s *PostgresRepository) SiteContent() models.SiteContent {
 	var content models.SiteContent
+	var featuredProductID sql.NullString
 	err := s.db.QueryRowContext(context.Background(), `
-		SELECT author_name, author_photo, author_p1, author_p2, author_p3, author_sign
+		SELECT author_name, author_photo, author_p1, author_p2, author_p3, author_sign, featured_product_id
 		FROM site_content
 		WHERE id = true
 	`).Scan(
@@ -214,14 +367,30 @@ func (s *PostgresRepository) SiteContent() models.SiteContent {
 		&content.Author.P2,
 		&content.Author.P3,
 		&content.Author.Sign,
+		&featuredProductID,
 	)
 	if err != nil {
 		return content
 	}
+	if featuredProductID.Valid {
+		content.FeaturedProductID = featuredProductID.String
+	}
 
 	content.HowToBuy = s.howToSteps()
-	content.Testimonials = s.testimonials()
+	content.Testimonials = s.Testimonials()
 	return content
+}
+
+func (s *PostgresRepository) UpdateSiteSettings(settings models.SiteSettings) error {
+	result, err := s.db.ExecContext(context.Background(), `
+		UPDATE site_content
+		SET featured_product_id = NULLIF($1, '')
+		WHERE id = true
+	`, settings.FeaturedProductID)
+	if err != nil {
+		return mapPostgresError(err)
+	}
+	return requireAffected(result, "site_content_not_found", "site content not found")
 }
 
 func (s *PostgresRepository) CreateOrder(req models.OrderRequest) models.OrderResponse {
@@ -369,9 +538,9 @@ func (s *PostgresRepository) howToSteps() []models.HowToStep {
 	return steps
 }
 
-func (s *PostgresRepository) testimonials() []models.Testimonial {
+func (s *PostgresRepository) Testimonials() []models.Testimonial {
 	rows, err := s.db.QueryContext(context.Background(), `
-		SELECT name, role, img, text
+		SELECT id, name, role, img, text
 		FROM testimonials
 		WHERE published = true
 		ORDER BY sort_order, id
@@ -384,12 +553,70 @@ func (s *PostgresRepository) testimonials() []models.Testimonial {
 	var testimonials []models.Testimonial
 	for rows.Next() {
 		var testimonial models.Testimonial
-		if err := rows.Scan(&testimonial.Name, &testimonial.Role, &testimonial.Img, &testimonial.Text); err != nil {
+		if err := rows.Scan(&testimonial.ID, &testimonial.Name, &testimonial.Role, &testimonial.Img, &testimonial.Text); err != nil {
 			return nil
 		}
 		testimonials = append(testimonials, testimonial)
 	}
 	return testimonials
+}
+
+func (s *PostgresRepository) CreateTestimonial(testimonial models.Testimonial) (models.Testimonial, error) {
+	err := s.db.QueryRowContext(context.Background(), `
+		INSERT INTO testimonials (name, role, img, text)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+	`, testimonial.Name, testimonial.Role, testimonial.Img, testimonial.Text).Scan(&testimonial.ID)
+	if err != nil {
+		return models.Testimonial{}, mapPostgresError(err)
+	}
+	return testimonial, nil
+}
+
+func (s *PostgresRepository) UpdateTestimonial(id int64, testimonial models.Testimonial) error {
+	result, err := s.db.ExecContext(context.Background(), `
+		UPDATE testimonials
+		SET name = $2,
+		    role = $3,
+		    img = $4,
+		    text = $5
+		WHERE id = $1
+	`, id, testimonial.Name, testimonial.Role, testimonial.Img, testimonial.Text)
+	if err != nil {
+		return mapPostgresError(err)
+	}
+	return requireAffected(result, "testimonial_not_found", "testimonial not found")
+}
+
+func (s *PostgresRepository) UpdateTestimonialImage(id int64, imageURL string) error {
+	result, err := s.db.ExecContext(context.Background(), `
+		UPDATE testimonials
+		SET img = $2
+		WHERE id = $1
+	`, id, imageURL)
+	if err != nil {
+		return mapPostgresError(err)
+	}
+	return requireAffected(result, "testimonial_not_found", "testimonial not found")
+}
+
+func (s *PostgresRepository) DeleteTestimonial(id int64) error {
+	result, err := s.db.ExecContext(context.Background(), `
+		DELETE FROM testimonials
+		WHERE id = $1
+	`, id)
+	if err != nil {
+		return mapPostgresError(err)
+	}
+	return requireAffected(result, "testimonial_not_found", "testimonial not found")
+}
+
+func parsePostDate(value string) (time.Time, error) {
+	postDate, err := time.Parse("2006-01-02", value)
+	if err != nil {
+		return time.Time{}, models.Validation("date_invalid", "date must use YYYY-MM-DD format")
+	}
+	return postDate, nil
 }
 
 func requireAffected(result sql.Result, code string, message string) error {

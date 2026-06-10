@@ -11,7 +11,6 @@ CREATE TABLE products (
   cat text NOT NULL REFERENCES categories(id),
   sub text NOT NULL DEFAULT '',
   img text NOT NULL DEFAULT '',
-  is_new boolean NOT NULL DEFAULT false,
   size text NOT NULL DEFAULT '',
   colors text NOT NULL DEFAULT '',
   canvas text NOT NULL DEFAULT '',

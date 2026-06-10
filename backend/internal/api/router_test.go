@@ -90,7 +90,7 @@ func TestAdminEndpointRequiresToken(t *testing.T) {
 func TestAdminCreateCategoryEndpoint(t *testing.T) {
 	router := testRouter()
 	cookie, csrfToken := loginAdmin(t, router)
-	body := strings.NewReader(`{"id":"new-category","label":"Новая категория"}`)
+	body := strings.NewReader(`{"label":"Новая категория"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/categories", body)
 	req.AddCookie(cookie)
 	req.Header.Set("X-CSRF-Token", csrfToken)
@@ -101,8 +101,91 @@ func TestAdminCreateCategoryEndpoint(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected status 201, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "new-category") {
-		t.Fatalf("expected created category in response, got %s", rec.Body.String())
+	var category models.Category
+	if err := json.NewDecoder(rec.Body).Decode(&category); err != nil {
+		t.Fatalf("decode category response: %v", err)
+	}
+	if category.ID == "" {
+		t.Fatalf("expected generated category id")
+	}
+	if category.Label != "Новая категория" {
+		t.Fatalf("expected created category label, got %s", category.Label)
+	}
+}
+
+func TestAdminUpdateSiteSettingsEndpoint(t *testing.T) {
+	router := testRouter()
+	cookie, csrfToken := loginAdmin(t, router)
+	body := strings.NewReader(`{"featuredProductId":"dragon_library"}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/admin/site-settings", body)
+	req.AddCookie(cookie)
+	req.Header.Set("X-CSRF-Token", csrfToken)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"featuredProductId":"dragon_library"`) {
+		t.Fatalf("expected updated site settings, got %s", rec.Body.String())
+	}
+}
+
+func TestAdminCreateTestimonialEndpoint(t *testing.T) {
+	router := testRouter()
+	cookie, csrfToken := loginAdmin(t, router)
+	body := strings.NewReader(`{"name":"Анна","role":"Вышивальщица","img":"","text":"Очень понятная схема."}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/testimonials", body)
+	req.AddCookie(cookie)
+	req.Header.Set("X-CSRF-Token", csrfToken)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"id":`) {
+		t.Fatalf("expected generated testimonial id, got %s", rec.Body.String())
+	}
+}
+
+func TestAdminCreateBlogPostEndpoint(t *testing.T) {
+	router := testRouter()
+	cookie, csrfToken := loginAdmin(t, router)
+	body := strings.NewReader(`{"title":"Процесс вышивки","date":"2026-06-11","tag":"Блог","img":"","excerpt":"Короткая заметка о процессе.","content":"Полный текст записи о процессе вышивки."}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/blog", body)
+	req.AddCookie(cookie)
+	req.Header.Set("X-CSRF-Token", csrfToken)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"id":`) {
+		t.Fatalf("expected generated blog post id, got %s", rec.Body.String())
+	}
+}
+
+func TestAdminCreateGalleryItemEndpoint(t *testing.T) {
+	router := testRouter()
+	cookie, csrfToken := loginAdmin(t, router)
+	body := strings.NewReader(`{"title":"Отшив маяка","by":"Анна","img":""}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/gallery", body)
+	req.AddCookie(cookie)
+	req.Header.Set("X-CSRF-Token", csrfToken)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"id":`) {
+		t.Fatalf("expected generated gallery item id, got %s", rec.Body.String())
 	}
 }
 

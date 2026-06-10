@@ -22,7 +22,7 @@ go run ./cmd/api
 
 По умолчанию API доступен на `http://localhost:3000/api`.
 Backend подключается к PostgreSQL через `DATABASE_URL`; если переменная не задана, используется локальная строка подключения ниже.
-Admin-доступ создается при старте backend из `ADMIN_USERNAME`/`ADMIN_PASSWORD`; локальные значения по умолчанию — `admin` / `dev-admin-password`.
+Admin-доступ создается при старте backend из `ADMIN_USERNAME`/`ADMIN_PASSWORD`; локальные значения по умолчанию — `dimas` / `dimas`.
 Для cookie-auth backend должен отдавать конкретный CORS origin, не `*`. По умолчанию разрешены `http://localhost:5173` и `http://127.0.0.1:5173`; дополнительные адреса задаются через `CORS_ALLOWED_ORIGINS`.
 
 ## Database
@@ -38,6 +38,8 @@ make db-start
 make db-migrate
 make db-stop
 make db-reset
+make storage-start
+make storage-stop
 make backend-run
 make frontend-run
 ```
@@ -47,3 +49,14 @@ make frontend-run
 ```bash
 postgres://forstitch:forstitch@localhost:5432/forstitch?sslmode=disable
 ```
+
+## File Storage
+
+Изображения товаров загружаются файлом через backend и хранятся в MinIO.
+
+```bash
+make storage-start
+```
+
+MinIO API доступен на `http://localhost:9000`, консоль — на `http://localhost:9001`.
+Локальные учетные данные: `forstitch` / `forstitch-secret`.

@@ -19,6 +19,7 @@ type Product struct {
 }
 
 type GalleryItem struct {
+	ID    int64  `json:"id,omitempty"`
 	Img   string `json:"img"`
 	Title string `json:"title"`
 	By    string `json:"by"`
@@ -31,6 +32,7 @@ type BlogPost struct {
 	Tag     string `json:"tag"`
 	Img     string `json:"img"`
 	Excerpt string `json:"excerpt"`
+	Content string `json:"content"`
 }
 
 type Author struct {
@@ -49,6 +51,7 @@ type HowToStep struct {
 }
 
 type Testimonial struct {
+	ID   int64  `json:"id,omitempty"`
 	Name string `json:"name"`
 	Role string `json:"role"`
 	Img  string `json:"img"`
@@ -56,9 +59,14 @@ type Testimonial struct {
 }
 
 type SiteContent struct {
-	Author       Author        `json:"author"`
-	HowToBuy     []HowToStep   `json:"howToBuy"`
-	Testimonials []Testimonial `json:"testimonials"`
+	Author            Author        `json:"author"`
+	FeaturedProductID string        `json:"featuredProductId,omitempty"`
+	HowToBuy          []HowToStep   `json:"howToBuy"`
+	Testimonials      []Testimonial `json:"testimonials"`
+}
+
+type SiteSettings struct {
+	FeaturedProductID string `json:"featuredProductId"`
 }
 
 type CartItem struct {
@@ -103,4 +111,9 @@ type SessionResponse struct {
 	Authenticated bool   `json:"authenticated"`
 	Username      string `json:"username,omitempty"`
 	CSRFToken     string `json:"csrfToken,omitempty"`
+}
+
+type FileObject struct {
+	ContentType string
+	Size        int64
 }

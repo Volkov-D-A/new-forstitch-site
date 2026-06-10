@@ -13,7 +13,7 @@ interface HeroCozyProps {
 
 export function HeroCozy({ data, formatPrice }: HeroCozyProps) {
   const navigate = useNavigate();
-  const featured = findProduct(data.products, HOME_FEATURED_PRODUCT_ID);
+  const featured = findProduct(data.products, data.featuredProductId || HOME_FEATURED_PRODUCT_ID);
 
   if (!featured) {
     return <EmptyState title="Товар для главного экрана не найден" text="Проверьте настройки главного товара в данных сайта." />;

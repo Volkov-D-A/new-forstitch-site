@@ -37,7 +37,7 @@ export function HomeTestimonialsSection({ testimonials }: HomeTestimonialsSectio
         </div>
         <div className="tst-grid">
           {testimonials.map((testimonial) => (
-            <TestimonialCard key={testimonial.name} testimonial={testimonial} />
+            <TestimonialCard key={testimonial.id || testimonial.name} testimonial={testimonial} />
           ))}
         </div>
       </div>

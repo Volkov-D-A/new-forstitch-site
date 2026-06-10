@@ -15,3 +15,7 @@ export function categoryPath(categoryId: CategoryId = 'all') {
 export function productPath(productId: string) {
   return `/product/${productId}`;
 }
+
+export function blogPostPath(postId: string) {
+  return `${ROUTES.blog}/${postId}`;
+}

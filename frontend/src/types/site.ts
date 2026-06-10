@@ -20,6 +20,7 @@ export interface Product {
 }
 
 export interface Testimonial {
+  id?: number;
   name: string;
   role: string;
   img: string;
@@ -27,6 +28,7 @@ export interface Testimonial {
 }
 
 export interface GalleryItem {
+  id?: number;
   img: string;
   title: string;
   by: string;
@@ -50,6 +52,7 @@ export interface BlogPost {
   tag: string;
   img: string;
   excerpt: string;
+  content: string;
 }
 
 export interface HowToStep {
@@ -65,7 +68,12 @@ export interface SiteData {
   gallery: GalleryItem[];
   author: Author;
   blog: BlogPost[];
+  featuredProductId?: string;
   howToBuy: HowToStep[];
+}
+
+export interface SiteSettings {
+  featuredProductId: string;
 }
 
 export interface CartItem {
