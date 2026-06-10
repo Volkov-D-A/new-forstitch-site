@@ -1,4 +1,4 @@
-package site
+package models
 
 type Category struct {
 	ID    string `json:"id"`
@@ -74,4 +74,33 @@ type OrderResponse struct {
 	ID          string `json:"id"`
 	CheckoutURL string `json:"checkoutUrl,omitempty"`
 	Message     string `json:"message,omitempty"`
+}
+
+type AdminUser struct {
+	ID           int64
+	Username     string
+	PasswordHash string
+}
+
+type AdminSession struct {
+	ID        string
+	UserID    int64
+	Username  string
+	CSRFToken string
+}
+
+type LoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type LoginResponse struct {
+	Username  string `json:"username"`
+	CSRFToken string `json:"csrfToken"`
+}
+
+type SessionResponse struct {
+	Authenticated bool   `json:"authenticated"`
+	Username      string `json:"username,omitempty"`
+	CSRFToken     string `json:"csrfToken,omitempty"`
 }

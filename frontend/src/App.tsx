@@ -4,13 +4,28 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 import { CartDrawer, Footer, Header, Toast } from './components/index';
 import { useCart } from './hooks/useCart';
 import { useSiteData } from './hooks/useSiteData';
-import { BlogPage, GalleryPage, HomePage, HowToPage, ProductPage, ShopPage } from './pages/index';
+import { AdminPage, BlogPage, GalleryPage, HomePage, HowToPage, ProductPage, ShopPage } from './pages/index';
 import { createOrder } from './services/siteApi';
 import { formatPrice } from './utils/currency';
 import { HOME_VARIANT } from './utils/homeContent';
 import { ROUTES } from './utils/routes';
 
 function App() {
+  const location = useLocation();
+
+  if (location.pathname.startsWith('/admin')) {
+    return (
+      <Routes>
+        <Route path="/admin" element={<AdminPage />} />
+        <Route path="/admin/*" element={<AdminPage />} />
+      </Routes>
+    );
+  }
+
+  return <PublicApp />;
+}
+
+function PublicApp() {
   const { data, error, isLoading } = useSiteData();
   const navigate = useNavigate();
   const location = useLocation();

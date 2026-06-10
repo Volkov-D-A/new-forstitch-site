@@ -158,7 +158,72 @@ Endpoint обязателен для текущего фронтенда.
 
 ## Следующие шаги
 
+## Admin API
+
+Админка использует session-based auth:
+
+```http
+POST /auth/login
+GET  /auth/session
+POST /auth/logout
+```
+
+`POST /auth/login` принимает:
+
+```json
+{ "username": "admin", "password": "dev-admin-password" }
+```
+
+Backend выставляет HttpOnly cookie `forstitch_admin_session` и возвращает CSRF-токен:
+
+```json
+{ "username": "admin", "csrfToken": "..." }
+```
+
+Фронтенд отправляет admin-запросы с `credentials: "include"`. Для `POST`, `PUT`, `DELETE` нужен заголовок:
+
+```http
+X-CSRF-Token: <csrfToken>
+```
+
+```http
+GET    /admin/categories
+POST   /admin/categories
+PUT    /admin/categories/:categoryId
+DELETE /admin/categories/:categoryId
+GET    /admin/products
+POST   /admin/products
+PUT    /admin/products/:productId
+DELETE /admin/products/:productId
+```
+
+Payload для категорий:
+
+```json
+{ "id": "flowers", "label": "Цветы" }
+```
+
+Payload для товаров совпадает с элементом `GET /products`.
+
+## Ошибки API
+
+Backend возвращает ошибки в едином формате:
+
+```json
+{
+  "error": {
+    "code": "order_empty",
+    "message": "order must contain at least one item"
+  }
+}
+```
+
+Фронтенду стоит ориентироваться на `error.code` для ветвления логики и показывать `error.message` как fallback-текст.
+
+## Следующие шаги
+
 - Подключить отдельную загрузку товара через `GET /products/:productId` на странице карточки.
 - Добавить форму контактов в checkout, если заказ должен собирать email до оплаты.
 - Добавить серверную фильтрацию и пагинацию для большого каталога: `GET /products?category=&sort=&page=`.
+- Расширить admin API на галерею, блог, site-content и заказы.
 - При необходимости добавить runtime-схему валидации, например Zod, чтобы явно валидировать ответы API.

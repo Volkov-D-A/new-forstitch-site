@@ -1,3 +1,4 @@
+export { AdminPage } from './AdminPage';
 export { BlogPage } from './BlogPage';
 export { GalleryPage } from './GalleryPage';
 export { HomePage } from './HomePage';

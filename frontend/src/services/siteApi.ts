@@ -8,7 +8,7 @@ import type {
   SiteData,
 } from '../types/site';
 
-const API_BASE_URL = 'http://localhost:3000/api';
+export const API_BASE_URL = 'http://localhost:3000/api';
 
 type SiteContentResponse = Pick<SiteData, 'author' | 'howToBuy' | 'testimonials'>;
 
