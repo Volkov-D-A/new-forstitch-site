@@ -77,7 +77,7 @@ POST http://localhost:3000/api/orders
   {
     "img": "https://example.com/gallery/work.jpg",
     "title": "Маяк на мысе Анива",
-    "by": "Анна"
+    "description": "Готовый отшив схемы с маяком."
   }
 ]
 ```
@@ -215,11 +215,14 @@ GET    /admin/products
 POST   /admin/products
 PUT    /admin/products/:productId
 POST   /admin/products/:productId/image
+POST   /admin/products/:productId/files
+DELETE /admin/products/:productId/files/:fileId
 DELETE /admin/products/:productId
 GET    /admin/blog
 POST   /admin/blog
 PUT    /admin/blog/:postId
 POST   /admin/blog/:postId/image
+POST   /admin/blog/images
 DELETE /admin/blog/:postId
 GET    /admin/gallery
 POST   /admin/gallery
@@ -242,6 +245,8 @@ Payload для категорий:
 ```
 
 При создании категорий и товаров `id` генерируется backend-ом и возвращается в ответе `POST`. Payload для товаров совпадает с элементом `GET /products`, но `id` при создании можно не передавать. Изображение товара не вводится URL вручную: админка отправляет `multipart/form-data` на `/admin/products/:productId/image` с полем `file`, а backend обновляет `img`.
+
+Файлы, которые покупатель получает после оплаты, загружаются по одному multipart-запросу на `/admin/products/:productId/files`. В оплаченных заказах поле `downloads` содержит защищенные ссылки на каждый файл товара.
 
 Настройки главной страницы:
 

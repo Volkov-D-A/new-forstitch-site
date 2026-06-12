@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime"
 	"net/http"
 	"strconv"
 	"time"
@@ -48,6 +49,7 @@ func NewRouter(service *services.Service, allowedOrigins []string) http.Handler 
 	mux.HandleFunc("POST /api/customer/logout", api.customerLogout)
 	mux.Handle("GET /api/customer/orders", api.customer(http.HandlerFunc(api.customerOrders)))
 	mux.Handle("GET /api/customer/orders/{orderID}", api.customer(http.HandlerFunc(api.customerOrder)))
+	mux.Handle("GET /api/customer/orders/{orderID}/files/{fileID}", api.customer(http.HandlerFunc(api.customerOrderFile)))
 	mux.Handle("GET /api/admin/categories", api.admin(http.HandlerFunc(api.adminCategories)))
 	mux.Handle("POST /api/admin/categories", api.admin(http.HandlerFunc(api.createCategory)))
 	mux.Handle("PUT /api/admin/categories/{categoryID}", api.admin(http.HandlerFunc(api.updateCategory)))
@@ -58,11 +60,14 @@ func NewRouter(service *services.Service, allowedOrigins []string) http.Handler 
 	mux.Handle("POST /api/admin/products/{productID}/image", api.admin(http.HandlerFunc(api.uploadProductImage)))
 	mux.Handle("POST /api/admin/products/{productID}/images", api.admin(http.HandlerFunc(api.uploadProductAdditionalImage)))
 	mux.Handle("DELETE /api/admin/products/{productID}/images/{imageID}", api.admin(http.HandlerFunc(api.deleteProductImage)))
+	mux.Handle("POST /api/admin/products/{productID}/files", api.admin(http.HandlerFunc(api.uploadProductFile)))
+	mux.Handle("DELETE /api/admin/products/{productID}/files/{fileID}", api.admin(http.HandlerFunc(api.deleteProductFile)))
 	mux.Handle("DELETE /api/admin/products/{productID}", api.admin(http.HandlerFunc(api.deleteProduct)))
 	mux.Handle("GET /api/admin/blog", api.admin(http.HandlerFunc(api.adminBlog)))
 	mux.Handle("POST /api/admin/blog", api.admin(http.HandlerFunc(api.createBlogPost)))
 	mux.Handle("PUT /api/admin/blog/{postID}", api.admin(http.HandlerFunc(api.updateBlogPost)))
 	mux.Handle("POST /api/admin/blog/{postID}/image", api.admin(http.HandlerFunc(api.uploadBlogPostImage)))
+	mux.Handle("POST /api/admin/blog/images", api.admin(http.HandlerFunc(api.uploadBlogContentImage)))
 	mux.Handle("DELETE /api/admin/blog/{postID}", api.admin(http.HandlerFunc(api.deleteBlogPost)))
 	mux.Handle("GET /api/admin/gallery", api.admin(http.HandlerFunc(api.adminGallery)))
 	mux.Handle("POST /api/admin/gallery", api.admin(http.HandlerFunc(api.createGalleryItem)))
@@ -135,7 +140,11 @@ func (api *API) categories(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (api *API) products(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, api.service.Products())
+	products := api.service.Products()
+	for index := range products {
+		products[index].Files = nil
+	}
+	writeJSON(w, http.StatusOK, products)
 }
 
 func (api *API) product(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +153,7 @@ func (api *API) product(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
-
+	product.Files = nil
 	writeJSON(w, http.StatusOK, product)
 }
 
@@ -187,6 +196,9 @@ func (api *API) adminOrders(w http.ResponseWriter, _ *http.Request) {
 	if err != nil {
 		writeAppError(w, err)
 		return
+	}
+	if orders == nil {
+		orders = []models.Order{}
 	}
 	writeJSON(w, http.StatusOK, orders)
 }
@@ -399,6 +411,9 @@ func (api *API) customerOrders(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
+	if orders == nil {
+		orders = []models.Order{}
+	}
 	writeJSON(w, http.StatusOK, orders)
 }
 
@@ -414,6 +429,34 @@ func (api *API) customerOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, order)
+}
+
+func (api *API) customerOrderFile(w http.ResponseWriter, r *http.Request) {
+	session, err := api.customerSessionFromRequest(r)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	fileID, ok := parseID(w, r.PathValue("fileID"))
+	if !ok {
+		return
+	}
+	reader, info, err := api.service.CustomerOrderFile(r.Context(), r.PathValue("orderID"), session.UserID, fileID)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	defer reader.Close()
+
+	if info.ContentType != "" {
+		w.Header().Set("Content-Type", info.ContentType)
+	}
+	if info.Size > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(info.Size, 10))
+	}
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": info.Name}))
+	w.Header().Set("Cache-Control", "private, no-store")
+	_, _ = io.Copy(w, reader)
 }
 
 func (api *API) adminCategories(w http.ResponseWriter, _ *http.Request) {
@@ -548,6 +591,42 @@ func (api *API) deleteProductImage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (api *API) uploadProductFile(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(110 << 20); err != nil {
+		writeAppError(w, models.BadRequest("invalid_multipart", "invalid multipart form"))
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeAppError(w, models.BadRequest("file_required", "file is required"))
+		return
+	}
+	defer file.Close()
+
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	product, err := api.service.UploadProductFile(r.Context(), r.PathValue("productID"), header.Filename, contentType, file, header.Size)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, product)
+}
+
+func (api *API) deleteProductFile(w http.ResponseWriter, r *http.Request) {
+	fileID, ok := parseID(w, r.PathValue("fileID"))
+	if !ok {
+		return
+	}
+	if err := api.service.DeleteProductFile(r.PathValue("productID"), fileID); err != nil {
+		writeAppError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (api *API) deleteProduct(w http.ResponseWriter, r *http.Request) {
 	if err := api.service.DeleteProduct(r.PathValue("productID")); err != nil {
 		writeAppError(w, err)
@@ -610,6 +689,30 @@ func (api *API) uploadBlogPostImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, post)
+}
+
+func (api *API) uploadBlogContentImage(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(12 << 20); err != nil {
+		writeAppError(w, models.BadRequest("invalid_multipart", "invalid multipart form"))
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeAppError(w, models.BadRequest("file_required", "file is required"))
+		return
+	}
+	defer file.Close()
+
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	imageURL, err := api.service.UploadBlogContentImage(r.Context(), header.Filename, contentType, file, header.Size)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"url": imageURL})
 }
 
 func (api *API) deleteBlogPost(w http.ResponseWriter, r *http.Request) {

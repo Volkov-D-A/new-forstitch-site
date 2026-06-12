@@ -185,6 +185,17 @@ export function uploadAdminBlogPostImage(csrfToken: string, postId: string, file
   });
 }
 
+export function uploadAdminBlogContentImage(csrfToken: string, file: File): Promise<{ url: string }> {
+  const body = new FormData();
+  body.append('file', file);
+
+  return request<{ url: string }>('/admin/blog/images', {
+    method: 'POST',
+    headers: csrfHeaders(csrfToken),
+    body,
+  });
+}
+
 export function deleteAdminBlogPost(csrfToken: string, postId: string): Promise<void> {
   return request<void>(`/admin/blog/${postId}`, {
     method: 'DELETE',
@@ -286,6 +297,24 @@ export function uploadAdminProductAdditionalImage(csrfToken: string, productId: 
 
 export function deleteAdminProductImage(csrfToken: string, productId: string, imageId: number): Promise<void> {
   return request<void>(`/admin/products/${productId}/images/${imageId}`, {
+    method: 'DELETE',
+    headers: csrfHeaders(csrfToken),
+  });
+}
+
+export function uploadAdminProductFile(csrfToken: string, productId: string, file: File): Promise<Product> {
+  const body = new FormData();
+  body.append('file', file);
+
+  return request<Product>(`/admin/products/${productId}/files`, {
+    method: 'POST',
+    headers: csrfHeaders(csrfToken),
+    body,
+  });
+}
+
+export function deleteAdminProductFile(csrfToken: string, productId: string, fileId: number): Promise<void> {
+  return request<void>(`/admin/products/${productId}/files/${fileId}`, {
     method: 'DELETE',
     headers: csrfHeaders(csrfToken),
   });

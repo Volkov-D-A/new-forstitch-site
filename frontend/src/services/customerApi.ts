@@ -94,6 +94,7 @@ export function logoutCustomer(): Promise<void> {
   return request<void>('/customer/logout', { method: 'POST' });
 }
 
-export function getCustomerOrders(): Promise<CustomerOrder[]> {
-  return request<CustomerOrder[]>('/customer/orders');
+export async function getCustomerOrders(): Promise<CustomerOrder[]> {
+  const orders = await request<CustomerOrder[] | null>('/customer/orders');
+  return Array.isArray(orders) ? orders : [];
 }

@@ -7,7 +7,6 @@ interface CartDrawerProps {
   isCheckoutLoading: boolean;
   onClose: () => void;
   onCheckout: () => void;
-  onQuantityChange: (productId: string, quantity: number) => void;
   onRemove: ProductIdHandler;
   onShopOpen: () => void;
   products: Product[];
@@ -16,7 +15,6 @@ interface CartDrawerProps {
 
 interface CartDrawerItem {
   product: Product;
-  quantity: number;
 }
 
 export function CartDrawer({
@@ -25,7 +23,6 @@ export function CartDrawer({
   isCheckoutLoading,
   onCheckout,
   onClose,
-  onQuantityChange,
   onRemove,
   onShopOpen,
   products,
@@ -33,10 +30,10 @@ export function CartDrawer({
   const items = cart
     .map((item) => {
       const product = products.find((candidate) => candidate.id === item.productId);
-      return product ? { product, quantity: item.quantity } : null;
+      return product ? { product } : null;
     })
     .filter((item): item is CartDrawerItem => Boolean(item));
-  const total = items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  const total = items.reduce((sum, item) => sum + item.product.price, 0);
 
   return (
     <React.Fragment>
@@ -55,7 +52,7 @@ export function CartDrawer({
               <p>В корзине пока пусто</p>
               <button className="btn btn-outline btn-sm" onClick={onShopOpen}>Перейти в магазин</button>
             </div>
-          ) : items.map(({ product, quantity }) => (
+          ) : items.map(({ product }) => (
             <div className="cart-row" key={product.id}>
               {product.img
                 ? <SImg className="cart-thumb" src={product.img} alt={product.title} />
@@ -63,11 +60,6 @@ export function CartDrawer({
               <div className="cart-info">
                 <div className="cart-title">{product.title}</div>
                 <div className="cart-price">PDF-схема · {formatPrice(product.price)}</div>
-                <div className="cart-qty">
-                  <button onClick={() => onQuantityChange(product.id, quantity - 1)} aria-label="Уменьшить количество">−</button>
-                  <span>{quantity}</span>
-                  <button onClick={() => onQuantityChange(product.id, quantity + 1)} aria-label="Увеличить количество">+</button>
-                </div>
               </div>
               <button className="cart-x" title="Убрать" onClick={() => onRemove(product.id)}>✕</button>
             </div>

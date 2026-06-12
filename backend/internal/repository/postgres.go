@@ -106,6 +106,7 @@ func (s *PostgresRepository) Products() []models.Product {
 			return nil
 		}
 		product.Images = s.productImages(product.ID)
+		product.Files = s.productFiles(product.ID)
 		products = append(products, product)
 	}
 	return products
@@ -140,6 +141,7 @@ func (s *PostgresRepository) Product(id string) (models.Product, error) {
 		return models.Product{}, err
 	}
 	product.Images = s.productImages(product.ID)
+	product.Files = s.productFiles(product.ID)
 	return product, nil
 }
 
@@ -204,6 +206,45 @@ func (s *PostgresRepository) DeleteProductImage(productID string, imageID int64)
 	return requireAffected(result, "product_image_not_found", "product image not found")
 }
 
+func (s *PostgresRepository) AddProductFile(productID string, name string, objectName string) (models.ProductFile, error) {
+	var file models.ProductFile
+	err := s.db.QueryRowContext(context.Background(), `
+		INSERT INTO product_files (product_id, name, object_name, sort_order)
+		VALUES ($1, $2, $3, COALESCE((SELECT max(sort_order) + 10 FROM product_files WHERE product_id = $1), 10))
+		RETURNING id, name, object_name
+	`, productID, name, objectName).Scan(&file.ID, &file.Name, &file.ObjectName)
+	return file, mapPostgresError(err)
+}
+
+func (s *PostgresRepository) DeleteProductFile(productID string, fileID int64) error {
+	result, err := s.db.ExecContext(context.Background(), `
+		DELETE FROM product_files
+		WHERE product_id = $1 AND id = $2
+	`, productID, fileID)
+	if err != nil {
+		return mapPostgresError(err)
+	}
+	return requireAffected(result, "product_file_not_found", "product file not found")
+}
+
+func (s *PostgresRepository) ProductFileForCustomerOrder(orderID string, customerID int64, fileID int64) (models.ProductFile, error) {
+	var file models.ProductFile
+	err := s.db.QueryRowContext(context.Background(), `
+		SELECT pf.id, pf.name, pf.object_name
+		FROM product_files pf
+		JOIN order_items oi ON oi.product_id = pf.product_id
+		JOIN orders o ON o.id = oi.order_id
+		WHERE o.id = $1
+		  AND o.customer_id = $2
+		  AND o.status IN ('paid', 'fulfilled')
+		  AND pf.id = $3
+	`, orderID, customerID, fileID).Scan(&file.ID, &file.Name, &file.ObjectName)
+	if err == sql.ErrNoRows {
+		return models.ProductFile{}, models.NotFound("product_file_not_found", "product file not found")
+	}
+	return file, err
+}
+
 func (s *PostgresRepository) DeleteProduct(id string) error {
 	result, err := s.db.ExecContext(context.Background(), `
 		DELETE FROM products
@@ -217,7 +258,7 @@ func (s *PostgresRepository) DeleteProduct(id string) error {
 
 func (s *PostgresRepository) Gallery() []models.GalleryItem {
 	rows, err := s.db.QueryContext(context.Background(), `
-		SELECT id, img, title, by_name
+		SELECT id, img, title, description
 		FROM gallery_items
 		WHERE published = true
 		ORDER BY sort_order, id
@@ -230,7 +271,7 @@ func (s *PostgresRepository) Gallery() []models.GalleryItem {
 	var gallery []models.GalleryItem
 	for rows.Next() {
 		var item models.GalleryItem
-		if err := rows.Scan(&item.ID, &item.Img, &item.Title, &item.By); err != nil {
+		if err := rows.Scan(&item.ID, &item.Img, &item.Title, &item.Description); err != nil {
 			return nil
 		}
 		gallery = append(gallery, item)
@@ -240,10 +281,10 @@ func (s *PostgresRepository) Gallery() []models.GalleryItem {
 
 func (s *PostgresRepository) CreateGalleryItem(item models.GalleryItem) (models.GalleryItem, error) {
 	err := s.db.QueryRowContext(context.Background(), `
-		INSERT INTO gallery_items (img, title, by_name)
+		INSERT INTO gallery_items (img, title, description)
 		VALUES ($1, $2, $3)
 		RETURNING id
-	`, item.Img, item.Title, item.By).Scan(&item.ID)
+	`, item.Img, item.Title, item.Description).Scan(&item.ID)
 	if err != nil {
 		return models.GalleryItem{}, mapPostgresError(err)
 	}
@@ -255,9 +296,9 @@ func (s *PostgresRepository) UpdateGalleryItem(id int64, item models.GalleryItem
 		UPDATE gallery_items
 		SET img = $2,
 		    title = $3,
-		    by_name = $4
+		    description = $4
 		WHERE id = $1
-	`, id, item.Img, item.Title, item.By)
+	`, id, item.Img, item.Title, item.Description)
 	if err != nil {
 		return mapPostgresError(err)
 	}
@@ -573,7 +614,13 @@ func (s *PostgresRepository) orderItems(orderID string, status string) ([]models
 			return nil, err
 		}
 		if status == "paid" || status == "fulfilled" {
-			item.DownloadURL = fmt.Sprintf("/api/customer/orders/%s/downloads/%s", orderID, item.ProductID)
+			for _, file := range s.productFiles(item.ProductID) {
+				item.DownloadURLs = append(item.DownloadURLs, models.DownloadFile{
+					ID:   file.ID,
+					Name: file.Name,
+					URL:  fmt.Sprintf("/api/customer/orders/%s/files/%d", orderID, file.ID),
+				})
+			}
 		}
 		items = append(items, item)
 	}
@@ -900,6 +947,29 @@ func (s *PostgresRepository) productImages(productID string) []models.ProductIma
 		images = append(images, image)
 	}
 	return images
+}
+
+func (s *PostgresRepository) productFiles(productID string) []models.ProductFile {
+	rows, err := s.db.QueryContext(context.Background(), `
+		SELECT id, name, object_name
+		FROM product_files
+		WHERE product_id = $1
+		ORDER BY sort_order, id
+	`, productID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var files []models.ProductFile
+	for rows.Next() {
+		var file models.ProductFile
+		if err := rows.Scan(&file.ID, &file.Name, &file.ObjectName); err != nil {
+			return nil
+		}
+		files = append(files, file)
+	}
+	return files
 }
 
 func (s *PostgresRepository) howToSteps() []models.HowToStep {

@@ -77,6 +77,60 @@ func TestCreateOrderValidation(t *testing.T) {
 	}
 }
 
+func TestPaidOrderIncludesProductFiles(t *testing.T) {
+	repo := repository.NewMemoryRepository()
+	if _, err := repo.AddProductFile("lighthouse_aniva", "scheme.pdf", "product-files/lighthouse_aniva/scheme.pdf"); err != nil {
+		t.Fatalf("add product file: %v", err)
+	}
+	service := services.New(repo)
+	hash, err := bcrypt.GenerateFromPassword([]byte("secret123"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatalf("hash customer password: %v", err)
+	}
+	if _, _, err := repo.EnsureCustomer("buyer@example.com", "Анна", string(hash)); err != nil {
+		t.Fatalf("seed customer: %v", err)
+	}
+	router := NewRouter(service, []string{"http://localhost:5173"})
+	cookie := loginCustomer(t, router)
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/orders", strings.NewReader(`{"items":[{"productId":"lighthouse_aniva","quantity":1}]}`))
+	createReq.AddCookie(cookie)
+	createRec := httptest.NewRecorder()
+	router.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d: %s", createRec.Code, createRec.Body.String())
+	}
+
+	ordersReq := httptest.NewRequest(http.MethodGet, "/api/customer/orders", nil)
+	ordersReq.AddCookie(cookie)
+	ordersRec := httptest.NewRecorder()
+	router.ServeHTTP(ordersRec, ordersReq)
+	if ordersRec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", ordersRec.Code, ordersRec.Body.String())
+	}
+	if !strings.Contains(ordersRec.Body.String(), `"name":"scheme.pdf"`) ||
+		!strings.Contains(ordersRec.Body.String(), `/files/1`) {
+		t.Fatalf("expected paid product download in response, got %s", ordersRec.Body.String())
+	}
+}
+
+func TestCustomerWithoutOrdersReceivesEmptyList(t *testing.T) {
+	router := testRouterWithCustomer(t)
+	cookie := loginCustomer(t, router)
+	req := httptest.NewRequest(http.MethodGet, "/api/customer/orders", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.TrimSpace(rec.Body.String()) != "[]" {
+		t.Fatalf("expected empty orders array, got %s", rec.Body.String())
+	}
+}
+
 func TestAdminEndpointRequiresToken(t *testing.T) {
 	router := testRouter()
 	body := strings.NewReader(`{"id":"new-category","label":"Новая категория"}`)
@@ -160,7 +214,7 @@ func TestAdminCreateTestimonialEndpoint(t *testing.T) {
 func TestAdminCreateBlogPostEndpoint(t *testing.T) {
 	router := testRouter()
 	cookie, csrfToken := loginAdmin(t, router)
-	body := strings.NewReader(`{"title":"Процесс вышивки","date":"2026-06-11","tag":"Блог","img":"","excerpt":"Короткая заметка о процессе.","content":"Полный текст записи о процессе вышивки."}`)
+	body := strings.NewReader(`{"title":"Процесс вышивки","date":"2026-06-11","tag":"Блог","img":"","content":"{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Первая строка записи.\"}]},{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Вторая строка записи.\"}]}]}"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/blog", body)
 	req.AddCookie(cookie)
 	req.Header.Set("X-CSRF-Token", csrfToken)
@@ -174,12 +228,15 @@ func TestAdminCreateBlogPostEndpoint(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), `"id":`) {
 		t.Fatalf("expected generated blog post id, got %s", rec.Body.String())
 	}
+	if !strings.Contains(rec.Body.String(), `"excerpt":"Первая строка записи. Вторая строка записи."`) {
+		t.Fatalf("expected excerpt generated from content, got %s", rec.Body.String())
+	}
 }
 
 func TestAdminCreateGalleryItemEndpoint(t *testing.T) {
 	router := testRouter()
 	cookie, csrfToken := loginAdmin(t, router)
-	body := strings.NewReader(`{"title":"Отшив маяка","by":"Анна","img":""}`)
+	body := strings.NewReader(`{"title":"Отшив маяка","description":"Работа по схеме с маяком.","img":""}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/gallery", body)
 	req.AddCookie(cookie)
 	req.Header.Set("X-CSRF-Token", csrfToken)
@@ -192,6 +249,9 @@ func TestAdminCreateGalleryItemEndpoint(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"id":`) {
 		t.Fatalf("expected generated gallery item id, got %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"description":"Работа по схеме с маяком."`) {
+		t.Fatalf("expected gallery description, got %s", rec.Body.String())
 	}
 }
 

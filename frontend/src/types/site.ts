@@ -12,6 +12,7 @@ export interface Product {
   cat: CategoryId;
   img?: string;
   images?: ProductImage[];
+  files?: ProductFile[];
   ph?: string;
   isNew?: boolean;
   size: string;
@@ -22,6 +23,11 @@ export interface Product {
 export interface ProductImage {
   id: number;
   url: string;
+}
+
+export interface ProductFile {
+  id: number;
+  name: string;
 }
 
 export interface Testimonial {
@@ -36,7 +42,7 @@ export interface GalleryItem {
   id?: number;
   img: string;
   title: string;
-  by: string;
+  description: string;
   w?: number;
   tall?: boolean;
 }
@@ -102,7 +108,13 @@ export interface OrderItem {
   productName: string;
   quantity: number;
   price: number;
-  downloadUrl?: string;
+  downloads?: DownloadFile[];
+}
+
+export interface DownloadFile {
+  id: number;
+  name: string;
+  url: string;
 }
 
 export interface CustomerOrder {

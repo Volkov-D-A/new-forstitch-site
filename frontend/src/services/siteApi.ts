@@ -46,6 +46,7 @@ function normalizeProduct(product: Product): Product {
     cat: String(product.cat),
     img: product.img || undefined,
     images: Array.isArray(product.images) ? product.images : [],
+    files: Array.isArray(product.files) ? product.files : [],
     isNew: Boolean(product.isNew),
     size: product.size || '',
     colors: product.colors || '',

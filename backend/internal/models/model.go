@@ -12,6 +12,7 @@ type Product struct {
 	Cat         string         `json:"cat"`
 	Img         string         `json:"img,omitempty"`
 	Images      []ProductImage `json:"images,omitempty"`
+	Files       []ProductFile  `json:"files,omitempty"`
 	IsNew       bool           `json:"isNew,omitempty"`
 	Size        string         `json:"size"`
 	Colors      string         `json:"colors"`
@@ -23,11 +24,17 @@ type ProductImage struct {
 	URL string `json:"url"`
 }
 
+type ProductFile struct {
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+	ObjectName string `json:"-"`
+}
+
 type GalleryItem struct {
-	ID    int64  `json:"id,omitempty"`
-	Img   string `json:"img"`
-	Title string `json:"title"`
-	By    string `json:"by"`
+	ID          int64  `json:"id,omitempty"`
+	Img         string `json:"img"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
 }
 
 type BlogPost struct {
@@ -101,11 +108,17 @@ type Order struct {
 }
 
 type OrderItem struct {
-	ProductID   string `json:"productId"`
-	ProductName string `json:"productName"`
-	Quantity    int    `json:"quantity"`
-	Price       int    `json:"price"`
-	DownloadURL string `json:"downloadUrl,omitempty"`
+	ProductID    string         `json:"productId"`
+	ProductName  string         `json:"productName"`
+	Quantity     int            `json:"quantity"`
+	Price        int            `json:"price"`
+	DownloadURLs []DownloadFile `json:"downloads,omitempty"`
+}
+
+type DownloadFile struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+	URL  string `json:"url"`
 }
 
 type CustomerUser struct {
@@ -186,4 +199,5 @@ type SessionResponse struct {
 type FileObject struct {
 	ContentType string
 	Size        int64
+	Name        string
 }

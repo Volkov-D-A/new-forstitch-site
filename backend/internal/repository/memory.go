@@ -95,16 +95,16 @@ func NewMemoryRepository() *MemoryRepository {
 		},
 		gallery: []models.GalleryItem{
 			{
-				ID:    1,
-				Img:   "https://forstitch.ru/wp-content/uploads/2021/05/16-495x400.jpg",
-				Title: "Маяк на мысе Анива",
-				By:    "Команда Forstitch",
+				ID:          1,
+				Img:         "https://forstitch.ru/wp-content/uploads/2021/05/16-495x400.jpg",
+				Title:       "Маяк на мысе Анива",
+				Description: "Готовый отшив схемы с маяком на скалистом берегу.",
 			},
 			{
-				ID:    2,
-				Img:   "https://forstitch.ru/wp-content/uploads/2016/11/oQrdgtvEwgs-773x1030.jpg",
-				Title: "Анемоны",
-				By:    "Команда Forstitch",
+				ID:          2,
+				Img:         "https://forstitch.ru/wp-content/uploads/2016/11/oQrdgtvEwgs-773x1030.jpg",
+				Title:       "Анемоны",
+				Description: "Цветочная вышивка с яркими анемонами.",
 			},
 		},
 		blog: []models.BlogPost{
@@ -234,6 +234,8 @@ func (s *MemoryRepository) UpdateProduct(id string, product models.Product) erro
 
 	for index, item := range s.products {
 		if item.ID == id {
+			product.Images = item.Images
+			product.Files = item.Files
 			s.products[index] = product
 			return nil
 		}
@@ -292,6 +294,67 @@ func (s *MemoryRepository) DeleteProductImage(productID string, imageID int64) e
 		return models.NotFound("product_image_not_found", "product image not found")
 	}
 	return models.NotFound("product_not_found", "product not found")
+}
+
+func (s *MemoryRepository) AddProductFile(productID string, name string, objectName string) (models.ProductFile, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for index, product := range s.products {
+		if product.ID == productID {
+			file := models.ProductFile{
+				ID:         int64(len(product.Files) + 1),
+				Name:       name,
+				ObjectName: objectName,
+			}
+			s.products[index].Files = append(s.products[index].Files, file)
+			return file, nil
+		}
+	}
+	return models.ProductFile{}, models.NotFound("product_not_found", "product not found")
+}
+
+func (s *MemoryRepository) DeleteProductFile(productID string, fileID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for productIndex, product := range s.products {
+		if product.ID != productID {
+			continue
+		}
+		for fileIndex, file := range product.Files {
+			if file.ID == fileID {
+				s.products[productIndex].Files = append(product.Files[:fileIndex], product.Files[fileIndex+1:]...)
+				return nil
+			}
+		}
+		return models.NotFound("product_file_not_found", "product file not found")
+	}
+	return models.NotFound("product_not_found", "product not found")
+}
+
+func (s *MemoryRepository) ProductFileForCustomerOrder(orderID string, _ int64, fileID int64) (models.ProductFile, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, order := range s.orders {
+		if order.ID != orderID || (order.Status != "paid" && order.Status != "fulfilled") {
+			continue
+		}
+		for _, item := range order.Items {
+			for _, product := range s.products {
+				if product.ID != item.ProductID {
+					continue
+				}
+				for _, file := range product.Files {
+					if file.ID == fileID {
+						return file, nil
+					}
+				}
+			}
+		}
+	}
+	return models.ProductFile{}, models.NotFound("product_file_not_found", "product file not found")
 }
 
 func (s *MemoryRepository) DeleteProduct(id string) error {
@@ -511,13 +574,26 @@ func (s *MemoryRepository) CreateOrder(req models.OrderRequest, customer models.
 		CreatedAt:     time.Now().Format(time.RFC3339),
 	}
 	for _, cartItem := range req.Items {
-		order.Items = append(order.Items, models.OrderItem{
+		item := models.OrderItem{
 			ProductID:   cartItem.ProductID,
 			ProductName: cartItem.ProductID,
 			Quantity:    cartItem.Quantity,
 			Price:       s.productPrice(cartItem.ProductID),
-			DownloadURL: fmt.Sprintf("/api/customer/orders/%s/downloads/%s", orderID, cartItem.ProductID),
-		})
+		}
+		for _, product := range s.products {
+			if product.ID != cartItem.ProductID {
+				continue
+			}
+			item.ProductName = product.Title
+			for _, file := range product.Files {
+				item.DownloadURLs = append(item.DownloadURLs, models.DownloadFile{
+					ID:   file.ID,
+					Name: file.Name,
+					URL:  fmt.Sprintf("/api/customer/orders/%s/files/%d", orderID, file.ID),
+				})
+			}
+		}
+		order.Items = append(order.Items, item)
 	}
 	s.orders = append(s.orders, order)
 	return models.OrderResponse{ID: orderID, Status: order.Status, Message: order.Message}, nil

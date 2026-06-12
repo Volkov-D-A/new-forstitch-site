@@ -4,6 +4,8 @@ import { EmptyState, SImg, Stitch } from '../components/index';
 import { blogPostPath, ROUTES } from '../utils/routes';
 import type { BlogPost, SiteData } from '../types/site';
 
+const RichTextContent = React.lazy(() => import('../components/RichTextEditor').then((module) => ({ default: module.RichTextContent })));
+
 interface BlogCardProps {
   post: BlogPost;
 }
@@ -72,11 +74,6 @@ export function BlogPostPage({ data }: BlogPageProps) {
     );
   }
 
-  const paragraphs = post.content
-    .split(/\n+/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
-
   return (
     <article data-screen-label={'Блог: ' + post.title}>
       <div className="wrap page-head compact">
@@ -93,7 +90,9 @@ export function BlogPostPage({ data }: BlogPageProps) {
           <h1 className="h-sec page-title">{post.title}</h1>
           <span className="blog-date">{post.date}</span>
           <div className="blog-post-content">
-            {paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+            <React.Suspense fallback={<p>Загружаем запись...</p>}>
+              <RichTextContent value={post.content} />
+            </React.Suspense>
           </div>
         </div>
       </div>

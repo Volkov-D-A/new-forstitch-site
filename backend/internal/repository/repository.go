@@ -18,6 +18,9 @@ type CatalogRepository interface {
 	UpdateProductImage(id string, imageURL string) error
 	AddProductImage(productID string, imageURL string) (models.ProductImage, error)
 	DeleteProductImage(productID string, imageID int64) error
+	AddProductFile(productID string, name string, objectName string) (models.ProductFile, error)
+	DeleteProductFile(productID string, fileID int64) error
+	ProductFileForCustomerOrder(orderID string, customerID int64, fileID int64) (models.ProductFile, error)
 	DeleteProduct(id string) error
 }
 

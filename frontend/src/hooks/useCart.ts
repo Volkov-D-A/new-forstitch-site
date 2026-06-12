@@ -14,9 +14,7 @@ export function useCart({ products, onAdded }: UseCartOptions) {
     setCart((currentCart) => {
       if (currentCart.some((item) => item.productId === id)) {
         setCartOpen(true);
-        return currentCart.map((item) => (
-          item.productId === id ? { ...item, quantity: item.quantity + 1 } : item
-        ));
+        return currentCart;
       }
 
       const product = products.find((item) => item.id === id);
@@ -29,15 +27,6 @@ export function useCart({ products, onAdded }: UseCartOptions) {
     setCart((currentCart) => currentCart.filter((item) => item.productId !== id));
   }, []);
 
-  const setQuantity = React.useCallback((id: string, quantity: number) => {
-    setCart((currentCart) => {
-      if (quantity < 1) return currentCart.filter((item) => item.productId !== id);
-      return currentCart.map((item) => (
-        item.productId === id ? { ...item, quantity } : item
-      ));
-    });
-  }, []);
-
   const clearCart = React.useCallback(() => {
     setCart([]);
   }, []);
@@ -45,13 +34,12 @@ export function useCart({ products, onAdded }: UseCartOptions) {
   return {
     addToCart,
     cart,
-    cartCount: cart.reduce((sum, item) => sum + item.quantity, 0),
+    cartCount: cart.length,
     clearCart,
     closeCart: () => setCartOpen(false),
     isInCart: (id: string) => cart.some((item) => item.productId === id),
     isCartOpen,
     openCart: () => setCartOpen(true),
     removeFromCart,
-    setQuantity,
   };
 }

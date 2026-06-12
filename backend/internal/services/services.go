@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strconv"
@@ -17,10 +18,12 @@ import (
 )
 
 const maxProductImageSize = 10 << 20
+const maxProductFileSize = 100 << 20
 const registrationCodeTTL = 15 * time.Minute
 
 type FileStorage interface {
 	PutProductImage(ctx context.Context, productID string, filename string, contentType string, reader io.Reader, size int64) (string, error)
+	PutProductFile(ctx context.Context, productID string, filename string, contentType string, reader io.Reader, size int64) (string, error)
 	PutTestimonialImage(ctx context.Context, testimonialID string, filename string, contentType string, reader io.Reader, size int64) (string, error)
 	PutBlogImage(ctx context.Context, postID string, filename string, contentType string, reader io.Reader, size int64) (string, error)
 	PutGalleryImage(ctx context.Context, itemID string, filename string, contentType string, reader io.Reader, size int64) (string, error)
@@ -159,6 +162,62 @@ func (s *Service) DeleteProductImage(id string, imageID int64) error {
 		return validation("image_id_invalid", "image id is invalid")
 	}
 	return s.repo.DeleteProductImage(id, imageID)
+}
+
+func (s *Service) UploadProductFile(ctx context.Context, id string, filename string, contentType string, reader io.Reader, size int64) (models.Product, error) {
+	if strings.TrimSpace(id) == "" {
+		return models.Product{}, validation("id_required", "id is required")
+	}
+	if s.files == nil {
+		return models.Product{}, models.Internal("file_storage_not_configured", "file storage is not configured")
+	}
+	if reader == nil || size <= 0 {
+		return models.Product{}, models.BadRequest("file_empty", "file must not be empty")
+	}
+	if size > maxProductFileSize {
+		return models.Product{}, models.BadRequest("file_too_large", "file must be 100MB or smaller")
+	}
+	filename = strings.TrimSpace(filename)
+	if filename == "" {
+		filename = "download"
+	}
+	objectName, err := s.files.PutProductFile(ctx, id, filename, contentType, reader, size)
+	if err != nil {
+		return models.Product{}, err
+	}
+	if _, err := s.repo.AddProductFile(id, filename, objectName); err != nil {
+		return models.Product{}, err
+	}
+	return s.repo.Product(id)
+}
+
+func (s *Service) DeleteProductFile(id string, fileID int64) error {
+	if strings.TrimSpace(id) == "" {
+		return validation("id_required", "id is required")
+	}
+	if fileID <= 0 {
+		return validation("file_id_invalid", "file id is invalid")
+	}
+	return s.repo.DeleteProductFile(id, fileID)
+}
+
+func (s *Service) CustomerOrderFile(ctx context.Context, orderID string, customerID int64, fileID int64) (io.ReadCloser, models.FileObject, error) {
+	if strings.TrimSpace(orderID) == "" || customerID <= 0 || fileID <= 0 {
+		return nil, models.FileObject{}, models.NotFound("file_not_found", "file not found")
+	}
+	if s.files == nil {
+		return nil, models.FileObject{}, models.NotFound("file_not_found", "file not found")
+	}
+	file, err := s.repo.ProductFileForCustomerOrder(orderID, customerID, fileID)
+	if err != nil {
+		return nil, models.FileObject{}, err
+	}
+	reader, info, err := s.files.Get(ctx, file.ObjectName)
+	if err != nil {
+		return nil, models.FileObject{}, models.NotFound("file_not_found", "file not found")
+	}
+	info.Name = file.Name
+	return reader, info, nil
 }
 
 func (s *Service) validateImageUpload(reader io.Reader, contentType string, size int64) error {
@@ -319,6 +378,17 @@ func (s *Service) UploadBlogPostImage(ctx context.Context, id string, filename s
 		}
 	}
 	return models.BlogPost{}, models.NotFound("blog_post_not_found", "blog post not found")
+}
+
+func (s *Service) UploadBlogContentImage(ctx context.Context, filename string, contentType string, reader io.Reader, size int64) (string, error) {
+	if err := s.validateImageUpload(reader, contentType, size); err != nil {
+		return "", err
+	}
+	objectName, err := s.files.PutBlogImage(ctx, "content", filename, contentType, reader, size)
+	if err != nil {
+		return "", err
+	}
+	return s.fileBaseURL + "/" + objectName, nil
 }
 
 func (s *Service) SiteContent() models.SiteContent {
@@ -497,7 +567,7 @@ func validateProduct(product models.Product) error {
 func normalizeGalleryItem(item models.GalleryItem) models.GalleryItem {
 	item.Img = strings.TrimSpace(item.Img)
 	item.Title = strings.TrimSpace(item.Title)
-	item.By = strings.TrimSpace(item.By)
+	item.Description = strings.TrimSpace(item.Description)
 	return item
 }
 
@@ -505,8 +575,8 @@ func validateGalleryItem(item models.GalleryItem) error {
 	if item.Title == "" {
 		return validation("title_required", "title is required")
 	}
-	if item.By == "" {
-		return validation("author_required", "by is required")
+	if item.Description == "" {
+		return validation("description_required", "description is required")
 	}
 	return nil
 }
@@ -516,9 +586,68 @@ func normalizeBlogPost(post models.BlogPost) models.BlogPost {
 	post.Date = strings.TrimSpace(post.Date)
 	post.Tag = strings.TrimSpace(post.Tag)
 	post.Img = strings.TrimSpace(post.Img)
-	post.Excerpt = strings.TrimSpace(post.Excerpt)
 	post.Content = strings.TrimSpace(post.Content)
+	post.Excerpt = blogExcerpt(post.Content)
 	return post
+}
+
+func blogExcerpt(content string) string {
+	const maxLength = 240
+
+	text := blogPlainText(content)
+	runes := []rune(text)
+	if len(runes) <= maxLength {
+		return text
+	}
+
+	runes = runes[:maxLength]
+	for index := len(runes) - 1; index >= maxLength/2; index-- {
+		if runes[index] == ' ' {
+			runes = runes[:index]
+			break
+		}
+	}
+	return strings.TrimSpace(string(runes)) + "..."
+}
+
+func blogPlainText(content string) string {
+	var document struct {
+		Type    string `json:"type"`
+		Content []struct {
+			Type    string          `json:"type"`
+			Text    string          `json:"text"`
+			Content json.RawMessage `json:"content"`
+		} `json:"content"`
+	}
+	if json.Unmarshal([]byte(content), &document) == nil && document.Type == "doc" {
+		var parts []string
+		var collect func(nodes json.RawMessage)
+		collect = func(nodes json.RawMessage) {
+			var items []struct {
+				Type    string          `json:"type"`
+				Text    string          `json:"text"`
+				Content json.RawMessage `json:"content"`
+			}
+			if json.Unmarshal(nodes, &items) != nil {
+				return
+			}
+			for _, item := range items {
+				if item.Text != "" {
+					parts = append(parts, item.Text)
+				}
+				if len(item.Content) > 0 {
+					collect(item.Content)
+				}
+				if item.Type == "paragraph" || item.Type == "heading" || item.Type == "listItem" {
+					parts = append(parts, " ")
+				}
+			}
+		}
+		root, _ := json.Marshal(document.Content)
+		collect(root)
+		return strings.Join(strings.Fields(strings.Join(parts, "")), " ")
+	}
+	return strings.Join(strings.Fields(content), " ")
 }
 
 func validateBlogPost(post models.BlogPost) error {
@@ -533,9 +662,6 @@ func validateBlogPost(post models.BlogPost) error {
 	}
 	if _, err := time.Parse("2006-01-02", post.Date); err != nil {
 		return validation("date_invalid", "date must use YYYY-MM-DD format")
-	}
-	if post.Excerpt == "" {
-		return validation("excerpt_required", "excerpt is required")
 	}
 	if post.Content == "" {
 		return validation("content_required", "content is required")

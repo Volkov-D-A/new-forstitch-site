@@ -10,6 +10,7 @@ import {
   deleteAdminCategory,
   deleteAdminGalleryItem,
   deleteAdminProduct,
+  deleteAdminProductFile,
   deleteAdminProductImage,
   deleteAdminTestimonial,
   getAdminBlog,
@@ -25,6 +26,7 @@ import {
   uploadAdminBlogPostImage,
   uploadAdminGalleryItemImage,
   uploadAdminProductAdditionalImage,
+  uploadAdminProductFile,
   uploadAdminTestimonialImage,
   uploadAdminProductImage,
   updateAdminCategory,
@@ -36,6 +38,8 @@ import {
 } from '../services/adminApi';
 import type { BlogPost, Category, CustomerOrder, GalleryItem, Product, SiteSettings, Testimonial } from '../types/site';
 import { formatPrice } from '../utils/currency';
+
+const RichTextEditor = React.lazy(() => import('../components/RichTextEditor').then((module) => ({ default: module.RichTextEditor })));
 
 const emptyCategory: Category = { id: '', label: '' };
 
@@ -63,7 +67,7 @@ const emptyBlogPost: BlogPost = {
 const emptyGalleryItem: GalleryItem = {
   img: '',
   title: '',
-  by: '',
+  description: '',
 };
 
 const emptySiteSettings: SiteSettings = { featuredProductId: '' };
@@ -112,6 +116,7 @@ export function AdminPage() {
   const [testimonialForm, setTestimonialForm] = React.useState<Testimonial>(emptyTestimonial);
   const [selectedProductImage, setSelectedProductImage] = React.useState<File | null>(null);
   const [selectedProductImages, setSelectedProductImages] = React.useState<File[]>([]);
+  const [selectedProductFiles, setSelectedProductFiles] = React.useState<File[]>([]);
   const [selectedBlogImage, setSelectedBlogImage] = React.useState<File | null>(null);
   const [selectedGalleryImage, setSelectedGalleryImage] = React.useState<File | null>(null);
   const [selectedTestimonialImage, setSelectedTestimonialImage] = React.useState<File | null>(null);
@@ -256,10 +261,17 @@ export function AdminPage() {
       if (selectedProductImages.length > 0) {
         setNotice('Изображения товара обновлены');
       }
+      for (const file of selectedProductFiles) {
+        await uploadAdminProductFile(csrfToken, savedProduct.id, file);
+      }
+      if (selectedProductFiles.length > 0) {
+        setNotice('Файлы товара обновлены');
+      }
 
       setProductForm(emptyProduct);
       setSelectedProductImage(null);
       setSelectedProductImages([]);
+      setSelectedProductFiles([]);
       setEditingProductId(null);
       await loadData();
     } catch (submitError) {
@@ -291,7 +303,7 @@ export function AdminPage() {
         date: blogForm.date.trim(),
         tag: blogForm.tag.trim(),
         img: blogForm.img.trim(),
-        excerpt: blogForm.excerpt.trim(),
+        excerpt: '',
         content: blogForm.content.trim(),
       };
 
@@ -326,7 +338,7 @@ export function AdminPage() {
         ...galleryForm,
         img: galleryForm.img.trim(),
         title: galleryForm.title.trim(),
-        by: galleryForm.by.trim(),
+        description: galleryForm.description.trim(),
       };
 
       let savedItem: GalleryItem;
@@ -397,6 +409,7 @@ export function AdminPage() {
     setProductForm({ ...product, img: product.img || '' });
     setSelectedProductImage(null);
     setSelectedProductImages([]);
+    setSelectedProductFiles([]);
   };
 
   const editBlogPost = (post: BlogPost) => {
@@ -446,6 +459,17 @@ export function AdminPage() {
     try {
       await deleteAdminProductImage(csrfToken, productId, imageId);
       setNotice('Изображение товара удалено');
+      await loadData();
+    } catch (deleteError) {
+      setError(getErrorMessage(deleteError));
+    }
+  };
+
+  const removeProductFile = async (productId: string, fileId: number) => {
+    if (!window.confirm('Удалить файл товара? Покупатели больше не смогут его скачать.')) return;
+    try {
+      await deleteAdminProductFile(csrfToken, productId, fileId);
+      setNotice('Файл товара удален');
       await loadData();
     } catch (deleteError) {
       setError(getErrorMessage(deleteError));
@@ -558,16 +582,20 @@ export function AdminPage() {
               setProductForm(emptyProduct);
               setSelectedProductImage(null);
               setSelectedProductImages([]);
+              setSelectedProductFiles([]);
             }}
             onChange={setProductForm}
             onEdit={editProduct}
             onAdditionalImagesChange={setSelectedProductImages}
             onImageChange={setSelectedProductImage}
+            onFilesChange={setSelectedProductFiles}
+            onRemoveFile={removeProductFile}
             onRemoveImage={removeProductImage}
             onRemove={removeProduct}
             onSubmit={submitProduct}
             products={products}
             selectedAdditionalImages={selectedProductImages}
+            selectedFiles={selectedProductFiles}
             selectedImage={selectedProductImage}
           />
         ) : tab === 'categories' ? (
@@ -586,6 +614,7 @@ export function AdminPage() {
           />
         ) : tab === 'blog' ? (
           <BlogAdmin
+            csrfToken={csrfToken}
             editingPostId={editingBlogPostId}
             form={blogForm}
             onCancel={() => {
@@ -596,6 +625,7 @@ export function AdminPage() {
             onChange={setBlogForm}
             onEdit={editBlogPost}
             onImageChange={setSelectedBlogImage}
+            onEditorError={setError}
             onRemove={removeBlogPost}
             onSubmit={submitBlogPost}
             posts={blogPosts}
@@ -712,19 +742,21 @@ function formatAdminDate(value: string) {
 }
 
 interface BlogAdminProps {
+  csrfToken: string;
   editingPostId: string | null;
   form: BlogPost;
   onCancel: () => void;
   onChange: (post: BlogPost) => void;
   onEdit: (post: BlogPost) => void;
   onImageChange: (file: File | null) => void;
+  onEditorError: (message: string) => void;
   onRemove: (post: BlogPost) => void;
   onSubmit: (event: React.FormEvent) => void;
   posts: BlogPost[];
   selectedImage: File | null;
 }
 
-function BlogAdmin({ editingPostId, form, onCancel, onChange, onEdit, onImageChange, onRemove, onSubmit, posts, selectedImage }: BlogAdminProps) {
+function BlogAdmin({ csrfToken, editingPostId, form, onCancel, onChange, onEdit, onEditorError, onImageChange, onRemove, onSubmit, posts, selectedImage }: BlogAdminProps) {
   return (
     <div className="admin-grid">
       <section className="admin-panel">
@@ -765,8 +797,17 @@ function BlogAdmin({ editingPostId, form, onCancel, onChange, onEdit, onImageCha
           <label className="admin-file-field">Обложка<input accept="image/*" type="file" onChange={(event) => onImageChange(event.target.files?.[0] || null)} /></label>
           {form.img ? <div className="admin-current-file">Текущая обложка: {form.img}</div> : null}
           {selectedImage ? <div className="admin-current-file">Новый файл: {selectedImage.name}</div> : null}
-          <label>Анонс<textarea value={form.excerpt} onChange={(event) => onChange({ ...form, excerpt: event.target.value })} /></label>
-          <label>Полный текст<textarea className="admin-textarea-large" value={form.content} onChange={(event) => onChange({ ...form, content: event.target.value })} /></label>
+          <div className="admin-form-wide">
+            <div className="admin-rich-label">Текст записи</div>
+            <React.Suspense fallback={<div className="rich-editor-loading">Загружаем редактор...</div>}>
+              <RichTextEditor
+                csrfToken={csrfToken}
+                value={form.content}
+                onChange={(content) => onChange({ ...form, content })}
+                onError={onEditorError}
+              />
+            </React.Suspense>
+          </div>
           <div className="admin-form-actions">
             <button className="btn btn-primary" type="submit">{editingPostId ? 'Сохранить' : 'Создать'}</button>
             {editingPostId ? <button className="btn btn-outline" type="button" onClick={onCancel}>Отмена</button> : null}
@@ -800,13 +841,13 @@ function GalleryAdmin({ editingItemId, form, items, onCancel, onChange, onEdit, 
         <div className="admin-table-wrap">
           <table className="admin-table">
             <thead>
-              <tr><th>Название</th><th>Автор</th><th></th></tr>
+              <tr><th>Название</th><th>Описание</th><th></th></tr>
             </thead>
             <tbody>
               {items.map((item) => (
                 <tr key={item.id || item.title}>
                   <td>{item.title}</td>
-                  <td>{item.by}</td>
+                  <td>{item.description}</td>
                   <td className="admin-row-actions">
                     <button onClick={() => onEdit(item)}>Изменить</button>
                     <button onClick={() => onRemove(item)}>Удалить</button>
@@ -825,7 +866,7 @@ function GalleryAdmin({ editingItemId, form, items, onCancel, onChange, onEdit, 
         <form className="admin-form product" onSubmit={onSubmit}>
           {editingItemId ? <div className="admin-current-file">ID: {editingItemId}</div> : null}
           <label>Название<input value={form.title} onChange={(event) => onChange({ ...form, title: event.target.value })} /></label>
-          <label>Автор<input value={form.by} onChange={(event) => onChange({ ...form, by: event.target.value })} /></label>
+          <label>Описание<input value={form.description} onChange={(event) => onChange({ ...form, description: event.target.value })} /></label>
           <label className="admin-file-field">Изображение<input accept="image/*" type="file" onChange={(event) => onImageChange(event.target.files?.[0] || null)} /></label>
           {form.img ? <div className="admin-current-file">Текущее изображение: {form.img}</div> : null}
           {selectedImage ? <div className="admin-current-file">Новый файл: {selectedImage.name}</div> : null}
@@ -873,13 +914,59 @@ function SiteSettingsAdmin({
   testimonials,
 }: SiteSettingsAdminProps) {
   return (
-    <div className="admin-grid">
+    <div className="admin-settings-layout">
+      <div className="admin-settings-column">
+        <section className="admin-panel">
+          <div className="admin-panel-head">
+            <h2>{editingTestimonialId ? 'Редактирование отзыва' : 'Новый отзыв'}</h2>
+          </div>
+          <form className="admin-form product" onSubmit={onSubmitTestimonial}>
+            <label>Имя<input value={testimonialForm.name} onChange={(event) => onChangeTestimonial({ ...testimonialForm, name: event.target.value })} /></label>
+            <label>Роль<input value={testimonialForm.role} onChange={(event) => onChangeTestimonial({ ...testimonialForm, role: event.target.value })} /></label>
+            <label className="admin-file-field">Фото<input accept="image/*" type="file" onChange={(event) => onChangeTestimonialImage(event.target.files?.[0] || null)} /></label>
+            {testimonialForm.img ? <div className="admin-current-file">Текущее фото: {testimonialForm.img}</div> : null}
+            {testimonialImage ? <div className="admin-current-file">Новый файл: {testimonialImage.name}</div> : null}
+            <label>Текст<textarea value={testimonialForm.text} onChange={(event) => onChangeTestimonial({ ...testimonialForm, text: event.target.value })} /></label>
+            <div className="admin-form-actions">
+              <button className="btn btn-primary" type="submit">{editingTestimonialId ? 'Сохранить' : 'Добавить'}</button>
+              {editingTestimonialId ? <button className="btn btn-outline" type="button" onClick={onCancelTestimonial}>Отмена</button> : null}
+            </div>
+          </form>
+        </section>
+
+        <section className="admin-panel">
+          <div className="admin-panel-head">
+            <h2>Отзывы</h2>
+          </div>
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr><th>Имя</th><th>Роль</th><th>Текст</th><th></th></tr>
+              </thead>
+              <tbody>
+                {testimonials.map((testimonial) => (
+                  <tr key={testimonial.id || testimonial.name}>
+                    <td>{testimonial.name}</td>
+                    <td>{testimonial.role}</td>
+                    <td>{testimonial.text}</td>
+                    <td className="admin-row-actions">
+                      <button onClick={() => onEditTestimonial(testimonial)}>Изменить</button>
+                      <button onClick={() => onRemoveTestimonial(testimonial)}>Удалить</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
       <section className="admin-panel">
         <div className="admin-panel-head">
-          <h2>Главная страница</h2>
+          <h2>Закрепленная схема</h2>
         </div>
         <form className="admin-form" onSubmit={onSubmit}>
-          <label>Закрепленная схема<select value={form.featuredProductId} onChange={(event) => onChange({ ...form, featuredProductId: event.target.value })}>
+          <label>Схема<select value={form.featuredProductId} onChange={(event) => onChange({ ...form, featuredProductId: event.target.value })}>
             <option value="">Не выбрана</option>
             {products.map((product) => (
               <option key={product.id} value={product.id}>{product.title}</option>
@@ -887,50 +974,6 @@ function SiteSettingsAdmin({
           </select></label>
           <div className="admin-form-actions">
             <button className="btn btn-primary" type="submit">Сохранить</button>
-          </div>
-        </form>
-      </section>
-
-      <section className="admin-panel">
-        <div className="admin-panel-head">
-          <h2>Отзывы</h2>
-        </div>
-        <div className="admin-table-wrap">
-          <table className="admin-table">
-            <thead>
-              <tr><th>Имя</th><th>Роль</th><th>Текст</th><th></th></tr>
-            </thead>
-            <tbody>
-              {testimonials.map((testimonial) => (
-                <tr key={testimonial.id || testimonial.name}>
-                  <td>{testimonial.name}</td>
-                  <td>{testimonial.role}</td>
-                  <td>{testimonial.text}</td>
-                  <td className="admin-row-actions">
-                    <button onClick={() => onEditTestimonial(testimonial)}>Изменить</button>
-                    <button onClick={() => onRemoveTestimonial(testimonial)}>Удалить</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="admin-panel">
-        <div className="admin-panel-head">
-          <h2>{editingTestimonialId ? 'Редактирование отзыва' : 'Новый отзыв'}</h2>
-        </div>
-        <form className="admin-form product" onSubmit={onSubmitTestimonial}>
-          <label>Имя<input value={testimonialForm.name} onChange={(event) => onChangeTestimonial({ ...testimonialForm, name: event.target.value })} /></label>
-          <label>Роль<input value={testimonialForm.role} onChange={(event) => onChangeTestimonial({ ...testimonialForm, role: event.target.value })} /></label>
-          <label className="admin-file-field">Фото<input accept="image/*" type="file" onChange={(event) => onChangeTestimonialImage(event.target.files?.[0] || null)} /></label>
-          {testimonialForm.img ? <div className="admin-current-file">Текущее фото: {testimonialForm.img}</div> : null}
-          {testimonialImage ? <div className="admin-current-file">Новый файл: {testimonialImage.name}</div> : null}
-          <label>Текст<textarea value={testimonialForm.text} onChange={(event) => onChangeTestimonial({ ...testimonialForm, text: event.target.value })} /></label>
-          <div className="admin-form-actions">
-            <button className="btn btn-primary" type="submit">{editingTestimonialId ? 'Сохранить' : 'Добавить'}</button>
-            {editingTestimonialId ? <button className="btn btn-outline" type="button" onClick={onCancelTestimonial}>Отмена</button> : null}
           </div>
         </form>
       </section>
@@ -1001,12 +1044,15 @@ interface ProductsAdminProps {
   onChange: (product: Product) => void;
   onEdit: (product: Product) => void;
   onAdditionalImagesChange: (files: File[]) => void;
+  onFilesChange: (files: File[]) => void;
   onImageChange: (file: File | null) => void;
   onRemoveImage: (productId: string, imageId: number) => void;
+  onRemoveFile: (productId: string, fileId: number) => void;
   onRemove: (productId: string) => void;
   onSubmit: (event: React.FormEvent) => void;
   products: Product[];
   selectedAdditionalImages: File[];
+  selectedFiles: File[];
   selectedImage: File | null;
 }
 
@@ -1018,15 +1064,44 @@ function ProductsAdmin({
   onCancel,
   onChange,
   onEdit,
+  onFilesChange,
   onImageChange,
   onRemove,
   onRemoveImage,
+  onRemoveFile,
   onSubmit,
   products,
   selectedAdditionalImages,
+  selectedFiles,
   selectedImage,
 }: ProductsAdminProps) {
   const categoryLabels = new Map(categories.map((category) => [category.id, category.label]));
+  const additionalImageInputRef = React.useRef<HTMLInputElement>(null);
+  const productFileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const addAdditionalImage = (file: File | null) => {
+    if (!file) return;
+    onAdditionalImagesChange([...selectedAdditionalImages, file]);
+    if (additionalImageInputRef.current) {
+      additionalImageInputRef.current.value = '';
+    }
+  };
+
+  const removeSelectedAdditionalImage = (indexToRemove: number) => {
+    onAdditionalImagesChange(selectedAdditionalImages.filter((_, index) => index !== indexToRemove));
+  };
+
+  const addProductFiles = (files: File[]) => {
+    if (files.length === 0) return;
+    onFilesChange([...selectedFiles, ...files]);
+    if (productFileInputRef.current) {
+      productFileInputRef.current.value = '';
+    }
+  };
+
+  const removeSelectedFile = (indexToRemove: number) => {
+    onFilesChange(selectedFiles.filter((_, index) => index !== indexToRemove));
+  };
 
   return (
     <div className="admin-grid">
@@ -1073,10 +1148,16 @@ function ProductsAdmin({
           <label className="admin-file-field">Изображение<input accept="image/*" type="file" onChange={(event) => onImageChange(event.target.files?.[0] || null)} /></label>
           {form.img ? <div className="admin-current-file">Текущее изображение: {form.img}</div> : null}
           {selectedImage ? <div className="admin-current-file">Новый файл: {selectedImage.name}</div> : null}
-          <label className="admin-file-field admin-form-wide">Дополнительные изображения<input accept="image/*" multiple type="file" onChange={(event) => onAdditionalImagesChange(Array.from(event.target.files || []))} /></label>
+          <label className="admin-file-field admin-form-wide">Добавить дополнительное изображение<input ref={additionalImageInputRef} accept="image/*" type="file" onChange={(event) => addAdditionalImage(event.target.files?.[0] || null)} /></label>
           {selectedAdditionalImages.length > 0 ? (
-            <div className="admin-current-file admin-form-wide">
-              Новые файлы: {selectedAdditionalImages.map((file) => file.name).join(', ')}
+            <div className="admin-selected-images admin-form-wide">
+              <div className="admin-selected-images-title">К загрузке</div>
+              {selectedAdditionalImages.map((file, index) => (
+                <div className="admin-selected-image" key={`${file.name}-${file.size}-${file.lastModified}-${index}`}>
+                  <span>{file.name}</span>
+                  <button type="button" onClick={() => removeSelectedAdditionalImage(index)}>Убрать</button>
+                </div>
+              ))}
             </div>
           ) : null}
           {form.images && form.images.length > 0 ? (
@@ -1085,6 +1166,29 @@ function ProductsAdmin({
                 <div className="admin-product-image" key={image.id}>
                   <img src={image.url} alt="" />
                   <button type="button" onClick={() => onRemoveImage(form.id, image.id)}>Удалить</button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <label className="admin-file-field admin-form-wide">Файлы для покупателя<input ref={productFileInputRef} multiple type="file" onChange={(event) => addProductFiles(Array.from(event.target.files || []))} /></label>
+          {selectedFiles.length > 0 ? (
+            <div className="admin-selected-images admin-form-wide">
+              <div className="admin-selected-images-title">Файлы к загрузке</div>
+              {selectedFiles.map((file, index) => (
+                <div className="admin-selected-image" key={`${file.name}-${file.size}-${file.lastModified}-${index}`}>
+                  <span>{file.name}</span>
+                  <button type="button" onClick={() => removeSelectedFile(index)}>Убрать</button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {form.files && form.files.length > 0 ? (
+            <div className="admin-product-files admin-form-wide">
+              <div className="admin-selected-images-title">Загруженные файлы</div>
+              {form.files.map((file) => (
+                <div className="admin-product-file" key={file.id}>
+                  <span>{file.name}</span>
+                  <button type="button" onClick={() => onRemoveFile(form.id, file.id)}>Удалить</button>
                 </div>
               ))}
             </div>

@@ -5,7 +5,8 @@ import { AuthModal, CartDrawer, Footer, Header, Toast } from './components/index
 import { useCart } from './hooks/useCart';
 import { useSiteData } from './hooks/useSiteData';
 import { AccountPage, AdminPage, BlogPage, BlogPostPage, GalleryPage, HomePage, HowToPage, ProductPage, ShopPage } from './pages/index';
-import { getCustomerSession } from './services/customerApi';
+import { getCustomerSession, logoutCustomer } from './services/customerApi';
+import type { CustomerSession } from './types/site';
 import { createOrder } from './services/siteApi';
 import { formatPrice } from './utils/currency';
 import { HOME_VARIANT } from './utils/homeContent';
@@ -47,20 +48,37 @@ function PublicApp() {
     isCartOpen,
     openCart,
     removeFromCart,
-    setQuantity,
   } = useCart({
     products: data?.products || [],
     onAdded: (product) => showToast('«' + (product ? product.title : '') + '» — в корзине'),
   });
   const [isCheckoutLoading, setCheckoutLoading] = React.useState(false);
   const [isAuthOpen, setAuthOpen] = React.useState(false);
+  const [customerSession, setCustomerSession] = React.useState<CustomerSession>({ authenticated: false });
+
+  React.useEffect(() => {
+    getCustomerSession()
+      .then(setCustomerSession)
+      .catch(() => setCustomerSession({ authenticated: false }));
+  }, []);
 
   const openAccount = async () => {
-    const session = await getCustomerSession();
+    const session = customerSession.authenticated ? customerSession : await getCustomerSession();
+    setCustomerSession(session);
     if (session.authenticated) {
       navigate(ROUTES.account);
     } else {
       setAuthOpen(true);
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await logoutCustomer();
+    } finally {
+      setCustomerSession({ authenticated: false });
+      if (location.pathname === ROUTES.account) navigate(ROUTES.home);
+      showToast('Вы вышли из профиля');
     }
   };
 
@@ -109,14 +127,22 @@ function PublicApp() {
 
   return (
     <React.Fragment>
-      <Header cartCount={cartCount} onAccount={openAccount} onCart={openCart} categories={data.categories} products={data.products} />
+      <Header
+        cartCount={cartCount}
+        customer={customerSession}
+        onAccount={openAccount}
+        onCart={openCart}
+        onLogout={logout}
+        categories={data.categories}
+        products={data.products}
+      />
       <main>
         <Routes>
           <Route path={ROUTES.home} element={<HomePage variant={HOME_VARIANT} addToCart={addToCart} isInCart={isInCart} data={data} formatPrice={formatPrice} />} />
           <Route path={ROUTES.shop} element={<ShopPage addToCart={addToCart} isInCart={isInCart} data={data} formatPrice={formatPrice} />} />
           <Route path="/shop/:categoryId" element={<ShopPage addToCart={addToCart} isInCart={isInCart} data={data} formatPrice={formatPrice} />} />
           <Route path="/product/:productId" element={<ProductPage addToCart={addToCart} isInCart={isInCart} data={data} formatPrice={formatPrice} />} />
-          <Route path={ROUTES.account} element={<AccountPage onAuthRequired={() => setAuthOpen(true)} />} />
+          <Route path={ROUTES.account} element={<AccountPage onAuthRequired={() => setAuthOpen(true)} onLoggedOut={() => setCustomerSession({ authenticated: false })} />} />
           <Route path={ROUTES.gallery} element={<GalleryPage data={data} />} />
           <Route path={ROUTES.blog} element={<BlogPage data={data} />} />
           <Route path="/blog/:postId" element={<BlogPostPage data={data} />} />
@@ -133,7 +159,6 @@ function PublicApp() {
           onClose={closeCart}
           onCheckout={checkout}
           onRemove={removeFromCart}
-          onQuantityChange={setQuantity}
           onShopOpen={() => {
             closeCart();
             navigate(ROUTES.shop);
@@ -143,7 +168,14 @@ function PublicApp() {
         />
       ) : null}
       {toast ? <Toast text={toast} /> : null}
-      <AuthModal isOpen={isAuthOpen} onClose={() => setAuthOpen(false)} onAuthenticated={() => showToast('Вы вошли в личный кабинет')} />
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setAuthOpen(false)}
+        onAuthenticated={(session) => {
+          setCustomerSession(session);
+          showToast('Вы вошли в личный кабинет');
+        }}
+      />
     </React.Fragment>
   );
 }

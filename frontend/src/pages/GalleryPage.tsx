@@ -11,7 +11,7 @@ function GalleryItemCard({ item, onOpen }: GalleryItemCardProps) {
   return (
     <div className="masonry-item" onClick={() => onOpen(item)}>
       <SImg src={item.img} alt={item.title} loading="lazy" />
-      <div className="masonry-cap"><b>{item.title}</b><span>{item.by}</span></div>
+      <div className="masonry-cap"><b>{item.title}</b><span>{item.description}</span></div>
     </div>
   );
 }
@@ -27,7 +27,7 @@ function Lightbox({ item, onClose }: LightboxProps) {
   return (
     <div className="lightbox" onClick={onClose}>
       <SImg src={item.img} alt={item.title} />
-      <div className="lightbox-cap">{item.title} — {item.by}</div>
+      <div className="lightbox-cap">{item.title} — {item.description}</div>
     </div>
   );
 }

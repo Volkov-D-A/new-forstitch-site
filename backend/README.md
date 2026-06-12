@@ -93,11 +93,14 @@ PUT    /api/admin/products/{productID}
 POST   /api/admin/products/{productID}/image
 POST   /api/admin/products/{productID}/images
 DELETE /api/admin/products/{productID}/images/{imageID}
+POST   /api/admin/products/{productID}/files
+DELETE /api/admin/products/{productID}/files/{fileID}
 DELETE /api/admin/products/{productID}
 GET    /api/admin/blog
 POST   /api/admin/blog
 PUT    /api/admin/blog/{postID}
 POST   /api/admin/blog/{postID}/image
+POST   /api/admin/blog/images
 DELETE /api/admin/blog/{postID}
 GET    /api/admin/gallery
 POST   /api/admin/gallery
@@ -201,6 +204,8 @@ curl -X POST http://localhost:3000/api/admin/products/lighthouse_aniva/images \
   -F 'file=@/path/to/detail.jpg'
 ```
 
+Цифровые файлы товара загружаются на `/api/admin/products/{productID}/files`. После оплаты покупатель получает отдельную защищенную ссылку на каждый файл в личном кабинете. Скачивание доступно только владельцу оплаченного заказа.
+
 Payload для записей блога:
 
 ```json
@@ -228,7 +233,7 @@ Payload для элементов галереи:
 ```json
 {
   "title": "Отшив маяка",
-  "by": "Анна",
+  "description": "Готовый отшив схемы с маяком.",
   "img": ""
 }
 ```

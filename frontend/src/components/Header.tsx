@@ -2,7 +2,7 @@ import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { categoryPath, ROUTES } from '../utils/routes';
 import { Logo } from './Logo';
-import type { Category, Product } from '../types/site';
+import type { Category, CustomerSession, Product } from '../types/site';
 
 const navLinks = [
   { to: ROUTES.home, label: 'Главная', end: true },
@@ -13,13 +13,15 @@ const navLinks = [
 
 interface HeaderProps {
   cartCount: number;
+  customer: CustomerSession;
   onAccount: () => void;
   onCart: () => void;
+  onLogout: () => void;
   categories: Category[];
   products: Product[];
 }
 
-export function Header({ cartCount, onAccount, onCart, categories, products }: HeaderProps) {
+export function Header({ cartCount, customer, onAccount, onCart, onLogout, categories, products }: HeaderProps) {
   const [shopOpen, setShopOpen] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const dropdownRef = React.useRef<HTMLDivElement | null>(null);
@@ -86,9 +88,20 @@ export function Header({ cartCount, onAccount, onCart, categories, products }: H
           ))}
         </nav>
         <div className="hdr-actions">
-          <button className="icon-btn" title="Личный кабинет" onClick={() => { closeMenus(); onAccount(); }}>
-            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="7" r="4"></circle></svg>
-          </button>
+          {customer.authenticated ? (
+            <div className="header-customer">
+              <button className="header-customer-name" title="Личный кабинет" onClick={() => { closeMenus(); onAccount(); }}>
+                {customer.name || customer.email}
+              </button>
+              <button className="icon-btn" title="Выйти из профиля" aria-label="Выйти из профиля" onClick={onLogout}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"></path></svg>
+              </button>
+            </div>
+          ) : (
+            <button className="icon-btn" title="Личный кабинет" onClick={() => { closeMenus(); onAccount(); }}>
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            </button>
+          )}
           <button className="icon-btn" title="Корзина" onClick={onCart}>
             <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
             {cartCount > 0 ? <span className="cart-badge">{cartCount}</span> : null}
@@ -111,7 +124,10 @@ export function Header({ cartCount, onAccount, onCart, categories, products }: H
           <NavLink className="mobile-link" to={ROUTES.gallery} onClick={closeMenus}>Галерея</NavLink>
           <NavLink className="mobile-link" to={ROUTES.blog} onClick={closeMenus}>Блог</NavLink>
           <NavLink className="mobile-link" to={ROUTES.howToBuy} onClick={closeMenus}>Как купить</NavLink>
-          <button className="mobile-link" onClick={() => { closeMenus(); onAccount(); }}>Личный кабинет</button>
+          <button className="mobile-link" onClick={() => { closeMenus(); onAccount(); }}>
+            {customer.authenticated ? (customer.name || customer.email) : 'Личный кабинет'}
+          </button>
+          {customer.authenticated ? <button className="mobile-link" onClick={() => { closeMenus(); onLogout(); }}>Выйти</button> : null}
           <div className="mobile-category-list">
             {categories.filter((category) => category.id !== 'all').map((category) => (
               <NavLink key={category.id} className="chip" to={categoryPath(category.id)} onClick={closeMenus}>

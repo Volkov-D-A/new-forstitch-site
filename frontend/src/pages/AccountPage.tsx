@@ -31,9 +31,10 @@ function downloadHref(downloadUrl: string) {
 
 interface AccountPageProps {
   onAuthRequired: () => void;
+  onLoggedOut: () => void;
 }
 
-export function AccountPage({ onAuthRequired }: AccountPageProps) {
+export function AccountPage({ onAuthRequired, onLoggedOut }: AccountPageProps) {
   const [session, setSession] = React.useState<CustomerSession>({ authenticated: false });
   const [orders, setOrders] = React.useState<CustomerOrder[]>([]);
   const [isLoading, setLoading] = React.useState(true);
@@ -69,6 +70,7 @@ export function AccountPage({ onAuthRequired }: AccountPageProps) {
 
   const logout = async () => {
     await logoutCustomer();
+    onLoggedOut();
     setSession({ authenticated: false });
     setOrders([]);
   };
@@ -123,8 +125,12 @@ export function AccountPage({ onAuthRequired }: AccountPageProps) {
                         <strong>{item.productName || item.productId}</strong>
                         <span>{item.quantity} × {formatPrice(item.price)}</span>
                       </div>
-                      {item.downloadUrl ? (
-                        <a className="btn btn-outline btn-sm" href={downloadHref(item.downloadUrl)}>Скачать</a>
+                      {item.downloads && item.downloads.length > 0 ? (
+                        <div className="account-downloads">
+                          {item.downloads.map((file) => (
+                            <a className="btn btn-outline btn-sm" href={downloadHref(file.url)} key={file.id}>{file.name}</a>
+                          ))}
+                        </div>
                       ) : null}
                     </div>
                   ))}

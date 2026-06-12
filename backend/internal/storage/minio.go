@@ -56,6 +56,17 @@ func (s *MinIOStorage) PutProductImage(ctx context.Context, productID string, fi
 	return objectName, nil
 }
 
+func (s *MinIOStorage) PutProductFile(ctx context.Context, productID string, filename string, contentType string, reader io.Reader, size int64) (string, error) {
+	objectName := imageObjectName("product-files", productID, filename)
+	_, err := s.client.PutObject(ctx, s.bucket, objectName, reader, size, minio.PutObjectOptions{
+		ContentType: contentType,
+	})
+	if err != nil {
+		return "", err
+	}
+	return objectName, nil
+}
+
 func (s *MinIOStorage) PutTestimonialImage(ctx context.Context, testimonialID string, filename string, contentType string, reader io.Reader, size int64) (string, error) {
 	objectName := imageObjectName("testimonials", testimonialID, filename)
 	_, err := s.client.PutObject(ctx, s.bucket, objectName, reader, size, minio.PutObjectOptions{

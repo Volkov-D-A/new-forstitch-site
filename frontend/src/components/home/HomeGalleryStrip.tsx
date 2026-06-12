@@ -26,7 +26,7 @@ export function HomeGalleryStrip({ gallery }: HomeGalleryStripProps) {
           {items.map((item, index) => (
             <div className="masonry-item home-gallery-card" key={index} onClick={() => navigate(ROUTES.gallery)}>
               <SImg className="home-gallery-image" src={item.img} alt={item.title} loading="lazy" />
-              <div className="masonry-cap"><b>{item.title}</b><span>{item.by}</span></div>
+              <div className="masonry-cap"><b>{item.title}</b><span>{item.description}</span></div>
             </div>
           ))}
         </div>
