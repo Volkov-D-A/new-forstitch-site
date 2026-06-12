@@ -10,10 +10,12 @@ import {
   deleteAdminCategory,
   deleteAdminGalleryItem,
   deleteAdminProduct,
+  deleteAdminProductImage,
   deleteAdminTestimonial,
   getAdminBlog,
   getAdminCategories,
   getAdminGallery,
+  getAdminOrders,
   getAdminProducts,
   getAdminSession,
   getAdminSiteSettings,
@@ -22,6 +24,7 @@ import {
   logoutAdmin,
   uploadAdminBlogPostImage,
   uploadAdminGalleryItemImage,
+  uploadAdminProductAdditionalImage,
   uploadAdminTestimonialImage,
   uploadAdminProductImage,
   updateAdminCategory,
@@ -31,7 +34,8 @@ import {
   updateAdminSiteSettings,
   updateAdminTestimonial,
 } from '../services/adminApi';
-import type { BlogPost, Category, GalleryItem, Product, SiteSettings, Testimonial } from '../types/site';
+import type { BlogPost, Category, CustomerOrder, GalleryItem, Product, SiteSettings, Testimonial } from '../types/site';
+import { formatPrice } from '../utils/currency';
 
 const emptyCategory: Category = { id: '', label: '' };
 
@@ -40,11 +44,10 @@ const emptyProduct: Product = {
   title: '',
   price: 0,
   cat: '',
-  sub: '',
   img: '',
   size: '',
   colors: '',
-  canvas: '',
+  description: '',
 };
 
 const emptyBlogPost: BlogPost = {
@@ -72,7 +75,16 @@ const emptyTestimonial: Testimonial = {
   text: '',
 };
 
-type AdminTab = 'products' | 'categories' | 'blog' | 'gallery' | 'settings';
+type AdminTab = 'products' | 'categories' | 'blog' | 'gallery' | 'orders' | 'settings';
+
+const orderStatusLabels: Record<string, string> = {
+  paid: 'Оплачен',
+  fulfilled: 'Выполнен',
+  cancelled: 'Отменен',
+  payment_failed: 'Платеж не прошел',
+  awaiting_payment: 'Ожидает оплаты',
+  email_pending: 'Ожидает email',
+};
 
 function getErrorMessage(error: unknown) {
   if (error instanceof AdminAPIError) return `${error.message} (${error.code})`;
@@ -90,6 +102,7 @@ export function AdminPage() {
   const [products, setProducts] = React.useState<Product[]>([]);
   const [blogPosts, setBlogPosts] = React.useState<BlogPost[]>([]);
   const [galleryItems, setGalleryItems] = React.useState<GalleryItem[]>([]);
+  const [orders, setOrders] = React.useState<CustomerOrder[]>([]);
   const [categoryForm, setCategoryForm] = React.useState<Category>(emptyCategory);
   const [productForm, setProductForm] = React.useState<Product>(emptyProduct);
   const [blogForm, setBlogForm] = React.useState<BlogPost>(emptyBlogPost);
@@ -98,6 +111,7 @@ export function AdminPage() {
   const [testimonials, setTestimonials] = React.useState<Testimonial[]>([]);
   const [testimonialForm, setTestimonialForm] = React.useState<Testimonial>(emptyTestimonial);
   const [selectedProductImage, setSelectedProductImage] = React.useState<File | null>(null);
+  const [selectedProductImages, setSelectedProductImages] = React.useState<File[]>([]);
   const [selectedBlogImage, setSelectedBlogImage] = React.useState<File | null>(null);
   const [selectedGalleryImage, setSelectedGalleryImage] = React.useState<File | null>(null);
   const [selectedTestimonialImage, setSelectedTestimonialImage] = React.useState<File | null>(null);
@@ -117,13 +131,14 @@ export function AdminPage() {
     setLoading(true);
     setError(null);
     try {
-      const [nextCategories, nextProducts, nextBlogPosts, nextGalleryItems, nextSettings, nextTestimonials] = await Promise.all([
+      const [nextCategories, nextProducts, nextBlogPosts, nextGalleryItems, nextSettings, nextTestimonials, nextOrders] = await Promise.all([
         getAdminCategories(),
         getAdminProducts(),
         getAdminBlog(),
         getAdminGallery(),
         getAdminSiteSettings(),
         getAdminTestimonials(),
+        getAdminOrders(),
       ]);
       setCategories(nextCategories);
       setProducts(nextProducts);
@@ -131,6 +146,7 @@ export function AdminPage() {
       setGalleryItems(nextGalleryItems);
       setSiteSettings(nextSettings);
       setTestimonials(nextTestimonials);
+      setOrders(nextOrders);
     } catch (loadError) {
       setError(getErrorMessage(loadError));
     } finally {
@@ -180,6 +196,7 @@ export function AdminPage() {
     setGalleryItems([]);
     setSiteSettings(emptySiteSettings);
     setTestimonials([]);
+    setOrders([]);
     setSelectedTestimonialImage(null);
     setNotice('Вы вышли');
   };
@@ -214,11 +231,10 @@ export function AdminPage() {
         title: productForm.title.trim(),
         price: Number(productForm.price) || 0,
         cat: productForm.cat.trim(),
-        sub: productForm.sub.trim(),
         img: productForm.img?.trim(),
         size: productForm.size.trim(),
         colors: productForm.colors.trim(),
-        canvas: productForm.canvas.trim(),
+        description: productForm.description?.trim(),
       };
 
       let savedProduct: Product;
@@ -234,9 +250,16 @@ export function AdminPage() {
         await uploadAdminProductImage(csrfToken, savedProduct.id, selectedProductImage);
         setNotice(editingProductId ? 'Товар и изображение обновлены' : 'Товар создан с изображением');
       }
+      for (const image of selectedProductImages) {
+        await uploadAdminProductAdditionalImage(csrfToken, savedProduct.id, image);
+      }
+      if (selectedProductImages.length > 0) {
+        setNotice('Изображения товара обновлены');
+      }
 
       setProductForm(emptyProduct);
       setSelectedProductImage(null);
+      setSelectedProductImages([]);
       setEditingProductId(null);
       await loadData();
     } catch (submitError) {
@@ -373,6 +396,7 @@ export function AdminPage() {
     setEditingProductId(product.id);
     setProductForm({ ...product, img: product.img || '' });
     setSelectedProductImage(null);
+    setSelectedProductImages([]);
   };
 
   const editBlogPost = (post: BlogPost) => {
@@ -411,6 +435,17 @@ export function AdminPage() {
     try {
       await deleteAdminProduct(csrfToken, productId);
       setNotice('Товар удален');
+      await loadData();
+    } catch (deleteError) {
+      setError(getErrorMessage(deleteError));
+    }
+  };
+
+  const removeProductImage = async (productId: string, imageId: number) => {
+    if (!window.confirm('Удалить дополнительное изображение товара?')) return;
+    try {
+      await deleteAdminProductImage(csrfToken, productId, imageId);
+      setNotice('Изображение товара удалено');
       await loadData();
     } catch (deleteError) {
       setError(getErrorMessage(deleteError));
@@ -457,21 +492,30 @@ export function AdminPage() {
           <span className="logo-word">forstitch</span>
           <span className="admin-kicker">admin</span>
         </div>
-        <button className={'admin-nav-item' + (tab === 'products' ? ' active' : '')} onClick={() => setTab('products')}>
-          Товары
-        </button>
-        <button className={'admin-nav-item' + (tab === 'categories' ? ' active' : '')} onClick={() => setTab('categories')}>
-          Категории
-        </button>
-        <button className={'admin-nav-item' + (tab === 'blog' ? ' active' : '')} onClick={() => setTab('blog')}>
-          Блог
-        </button>
-        <button className={'admin-nav-item' + (tab === 'gallery' ? ' active' : '')} onClick={() => setTab('gallery')}>
-          Галерея
-        </button>
-        <button className={'admin-nav-item' + (tab === 'settings' ? ' active' : '')} onClick={() => setTab('settings')}>
-          Главная
-        </button>
+        <div className="admin-nav-group">
+          <div className="admin-nav-label">Информация</div>
+          <button className={'admin-nav-item' + (tab === 'orders' ? ' active' : '')} onClick={() => setTab('orders')}>
+            Заказы
+          </button>
+        </div>
+        <div className="admin-nav-group">
+          <div className="admin-nav-label">Настройки</div>
+          <button className={'admin-nav-item' + (tab === 'products' ? ' active' : '')} onClick={() => setTab('products')}>
+            Товары
+          </button>
+          <button className={'admin-nav-item' + (tab === 'categories' ? ' active' : '')} onClick={() => setTab('categories')}>
+            Категории
+          </button>
+          <button className={'admin-nav-item' + (tab === 'blog' ? ' active' : '')} onClick={() => setTab('blog')}>
+            Блог
+          </button>
+          <button className={'admin-nav-item' + (tab === 'gallery' ? ' active' : '')} onClick={() => setTab('gallery')}>
+            Галерея
+          </button>
+          <button className={'admin-nav-item' + (tab === 'settings' ? ' active' : '')} onClick={() => setTab('settings')}>
+            Главная
+          </button>
+        </div>
       </aside>
 
       <main className="admin-main">
@@ -513,13 +557,17 @@ export function AdminPage() {
               setEditingProductId(null);
               setProductForm(emptyProduct);
               setSelectedProductImage(null);
+              setSelectedProductImages([]);
             }}
             onChange={setProductForm}
             onEdit={editProduct}
+            onAdditionalImagesChange={setSelectedProductImages}
             onImageChange={setSelectedProductImage}
+            onRemoveImage={removeProductImage}
             onRemove={removeProduct}
             onSubmit={submitProduct}
             products={products}
+            selectedAdditionalImages={selectedProductImages}
             selectedImage={selectedProductImage}
           />
         ) : tab === 'categories' ? (
@@ -570,6 +618,8 @@ export function AdminPage() {
             onSubmit={submitGalleryItem}
             selectedImage={selectedGalleryImage}
           />
+        ) : tab === 'orders' ? (
+          <OrdersAdmin orders={orders} />
         ) : (
           <SiteSettingsAdmin
             editingTestimonialId={editingTestimonialId}
@@ -595,6 +645,70 @@ export function AdminPage() {
       </main>
     </div>
   );
+}
+
+function OrdersAdmin({ orders }: { orders: CustomerOrder[] }) {
+  const total = (order: CustomerOrder) => order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  return (
+    <section className="admin-panel">
+      <div className="admin-panel-head">
+        <h2>Заказы</h2>
+      </div>
+      {orders.length === 0 ? (
+        <div className="admin-empty">Заказов пока нет.</div>
+      ) : (
+        <div className="admin-table-wrap">
+          <table className="admin-table admin-orders-table">
+            <thead>
+              <tr>
+                <th>Заказ</th>
+                <th>Покупатель</th>
+                <th>Email</th>
+                <th>Схемы</th>
+                <th>Статус</th>
+                <th>Сумма</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((order) => (
+                <tr key={order.id}>
+                  <td>
+                    <code>{order.id}</code>
+                    <div className="admin-muted">{formatAdminDate(order.createdAt)}</div>
+                  </td>
+                  <td>{order.customerName || '—'}</td>
+                  <td>{order.customerEmail}</td>
+                  <td>
+                    <div className="admin-order-items">
+                      {order.items.map((item) => (
+                        <span key={item.productId}>
+                          {item.productName || item.productId} × {item.quantity}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td><span className={'order-status status-' + order.status}>{orderStatusLabels[order.status] || order.status}</span></td>
+                  <td>{formatPrice(total(order))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function formatAdminDate(value: string) {
+  if (!value) return '';
+  return new Date(value).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 interface BlogAdminProps {
@@ -886,14 +1000,32 @@ interface ProductsAdminProps {
   onCancel: () => void;
   onChange: (product: Product) => void;
   onEdit: (product: Product) => void;
+  onAdditionalImagesChange: (files: File[]) => void;
   onImageChange: (file: File | null) => void;
+  onRemoveImage: (productId: string, imageId: number) => void;
   onRemove: (productId: string) => void;
   onSubmit: (event: React.FormEvent) => void;
   products: Product[];
+  selectedAdditionalImages: File[];
   selectedImage: File | null;
 }
 
-function ProductsAdmin({ categories, editingProductId, form, onCancel, onChange, onEdit, onImageChange, onRemove, onSubmit, products, selectedImage }: ProductsAdminProps) {
+function ProductsAdmin({
+  categories,
+  editingProductId,
+  form,
+  onAdditionalImagesChange,
+  onCancel,
+  onChange,
+  onEdit,
+  onImageChange,
+  onRemove,
+  onRemoveImage,
+  onSubmit,
+  products,
+  selectedAdditionalImages,
+  selectedImage,
+}: ProductsAdminProps) {
   const categoryLabels = new Map(categories.map((category) => [category.id, category.label]));
 
   return (
@@ -938,13 +1070,28 @@ function ProductsAdmin({ categories, editingProductId, form, onCancel, onChange,
               <option key={category.id} value={category.id}>{category.label}</option>
             ))}
           </select></label>
-          <label>Подкатегория<input value={form.sub} onChange={(event) => onChange({ ...form, sub: event.target.value })} /></label>
           <label className="admin-file-field">Изображение<input accept="image/*" type="file" onChange={(event) => onImageChange(event.target.files?.[0] || null)} /></label>
           {form.img ? <div className="admin-current-file">Текущее изображение: {form.img}</div> : null}
           {selectedImage ? <div className="admin-current-file">Новый файл: {selectedImage.name}</div> : null}
+          <label className="admin-file-field admin-form-wide">Дополнительные изображения<input accept="image/*" multiple type="file" onChange={(event) => onAdditionalImagesChange(Array.from(event.target.files || []))} /></label>
+          {selectedAdditionalImages.length > 0 ? (
+            <div className="admin-current-file admin-form-wide">
+              Новые файлы: {selectedAdditionalImages.map((file) => file.name).join(', ')}
+            </div>
+          ) : null}
+          {form.images && form.images.length > 0 ? (
+            <div className="admin-product-images admin-form-wide">
+              {form.images.map((image) => (
+                <div className="admin-product-image" key={image.id}>
+                  <img src={image.url} alt="" />
+                  <button type="button" onClick={() => onRemoveImage(form.id, image.id)}>Удалить</button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <label>Размер<input value={form.size} onChange={(event) => onChange({ ...form, size: event.target.value })} /></label>
           <label>Палитра<input value={form.colors} onChange={(event) => onChange({ ...form, colors: event.target.value })} /></label>
-          <label>Основа<input value={form.canvas} onChange={(event) => onChange({ ...form, canvas: event.target.value })} /></label>
+          <label className="admin-form-wide">Описание<textarea value={form.description || ''} onChange={(event) => onChange({ ...form, description: event.target.value })} /></label>
           <div className="admin-form-actions">
             <button className="btn btn-primary" type="submit">{editingProductId ? 'Сохранить' : 'Создать'}</button>
             {editingProductId ? <button className="btn btn-outline" type="button" onClick={onCancel}>Отмена</button> : null}

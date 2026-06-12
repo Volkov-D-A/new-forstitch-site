@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"crypto/rand"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -9,11 +11,13 @@ import (
 
 	"github.com/google/uuid"
 
+	"new-forstitch-site/backend/internal/mailer"
 	"new-forstitch-site/backend/internal/models"
 	"new-forstitch-site/backend/internal/repository"
 )
 
 const maxProductImageSize = 10 << 20
+const registrationCodeTTL = 15 * time.Minute
 
 type FileStorage interface {
 	PutProductImage(ctx context.Context, productID string, filename string, contentType string, reader io.Reader, size int64) (string, error)
@@ -24,18 +28,29 @@ type FileStorage interface {
 }
 
 type Service struct {
+	appBaseURL  string
 	fileBaseURL string
 	files       FileStorage
+	mailer      mailer.Mailer
 	repo        repository.Repository
 }
 
 func New(repo repository.Repository) *Service {
-	return &Service{repo: repo}
+	return &Service{repo: repo, mailer: mailer.Noop{}}
 }
 
 func (s *Service) ConfigureFiles(files FileStorage, fileBaseURL string) {
 	s.files = files
 	s.fileBaseURL = strings.TrimRight(fileBaseURL, "/")
+}
+
+func (s *Service) ConfigureMailer(sender mailer.Mailer, appBaseURL string) {
+	if sender == nil {
+		s.mailer = mailer.Noop{}
+	} else {
+		s.mailer = sender
+	}
+	s.appBaseURL = strings.TrimRight(appBaseURL, "/")
 }
 
 func (s *Service) Categories() []models.Category {
@@ -116,6 +131,34 @@ func (s *Service) UploadProductImage(ctx context.Context, id string, filename st
 		return models.Product{}, err
 	}
 	return s.repo.Product(id)
+}
+
+func (s *Service) UploadProductAdditionalImage(ctx context.Context, id string, filename string, contentType string, reader io.Reader, size int64) (models.Product, error) {
+	if strings.TrimSpace(id) == "" {
+		return models.Product{}, validation("id_required", "id is required")
+	}
+	if err := s.validateImageUpload(reader, contentType, size); err != nil {
+		return models.Product{}, err
+	}
+	objectName, err := s.files.PutProductImage(ctx, id, filename, contentType, reader, size)
+	if err != nil {
+		return models.Product{}, err
+	}
+	imageURL := s.fileBaseURL + "/" + objectName
+	if _, err := s.repo.AddProductImage(id, imageURL); err != nil {
+		return models.Product{}, err
+	}
+	return s.repo.Product(id)
+}
+
+func (s *Service) DeleteProductImage(id string, imageID int64) error {
+	if strings.TrimSpace(id) == "" {
+		return validation("id_required", "id is required")
+	}
+	if imageID <= 0 {
+		return validation("image_id_invalid", "image id is invalid")
+	}
+	return s.repo.DeleteProductImage(id, imageID)
 }
 
 func (s *Service) validateImageUpload(reader io.Reader, contentType string, size int64) error {
@@ -360,11 +403,19 @@ func (s *Service) UpdateSiteSettings(settings models.SiteSettings) (models.SiteS
 	return settings, nil
 }
 
-func (s *Service) CreateOrder(req models.OrderRequest) (models.OrderResponse, error) {
+func (s *Service) CreateOrder(req models.OrderRequest, customer models.CustomerUser) (models.OrderResponse, error) {
 	if err := validateOrder(req); err != nil {
 		return models.OrderResponse{}, err
 	}
-	return s.repo.CreateOrder(req), nil
+	response, err := s.repo.CreateOrder(req, customer)
+	if err != nil {
+		return models.OrderResponse{}, err
+	}
+	return response, nil
+}
+
+func (s *Service) AdminOrders() ([]models.Order, error) {
+	return s.repo.Orders()
 }
 
 func validateOrder(req models.OrderRequest) error {
@@ -382,6 +433,39 @@ func validateOrder(req models.OrderRequest) error {
 	}
 
 	return nil
+}
+
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+func randomCode() (string, error) {
+	bytes := make([]byte, 4)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return "", err
+	}
+	value := int(bytes[0])<<24 | int(bytes[1])<<16 | int(bytes[2])<<8 | int(bytes[3])
+	if value < 0 {
+		value = -value
+	}
+	return fmt.Sprintf("%06d", value%1000000), nil
+}
+
+func (s *Service) sendRegistrationCode(email string, code string) error {
+	if s.mailer == nil {
+		return nil
+	}
+	body := "Код подтверждения Forstitch: " + code + "\n\nВведите этот код в форме регистрации. Код действует 15 минут.\n"
+	return s.mailer.Send(email, "Код подтверждения Forstitch", body)
+}
+
+func (s *Service) sendPasswordResetCode(email string, code string) error {
+	if s.mailer == nil {
+		return nil
+	}
+	body := "Код восстановления пароля Forstitch: " + code + "\n\nВведите этот код в форме восстановления. Код действует 15 минут.\n"
+	return s.mailer.Send(email, "Код восстановления пароля Forstitch", body)
 }
 
 func validateCategory(category models.Category) error {

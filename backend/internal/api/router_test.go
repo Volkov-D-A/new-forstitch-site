@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"new-forstitch-site/backend/internal/models"
 	"new-forstitch-site/backend/internal/repository"
 	"new-forstitch-site/backend/internal/services"
@@ -40,9 +42,11 @@ func TestMissingProductEndpoint(t *testing.T) {
 }
 
 func TestCreateOrderEndpoint(t *testing.T) {
-	router := testRouter()
+	router := testRouterWithCustomer(t)
+	cookie := loginCustomer(t, router)
 	body := strings.NewReader(`{"items":[{"productId":"lighthouse_aniva","quantity":1}]}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/orders", body)
+	req.AddCookie(cookie)
 	rec := httptest.NewRecorder()
 
 	router.ServeHTTP(rec, req)
@@ -56,9 +60,11 @@ func TestCreateOrderEndpoint(t *testing.T) {
 }
 
 func TestCreateOrderValidation(t *testing.T) {
-	router := testRouter()
+	router := testRouterWithCustomer(t)
+	cookie := loginCustomer(t, router)
 	body := strings.NewReader(`{"items":[]}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/orders", body)
+	req.AddCookie(cookie)
 	rec := httptest.NewRecorder()
 
 	router.ServeHTTP(rec, req)
@@ -197,6 +203,24 @@ func testRouter() http.Handler {
 	return NewRouter(service, []string{"http://localhost:5173"})
 }
 
+func testRouterWithCustomer(t *testing.T) http.Handler {
+	t.Helper()
+
+	repo := repository.NewMemoryRepository()
+	service := services.New(repo)
+	if err := service.EnsureAdminUser("admin", "password"); err != nil {
+		panic(err)
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte("secret123"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatalf("hash customer password: %v", err)
+	}
+	if _, _, err := repo.EnsureCustomer("buyer@example.com", "Анна", string(hash)); err != nil {
+		t.Fatalf("seed customer: %v", err)
+	}
+	return NewRouter(service, []string{"http://localhost:5173"})
+}
+
 func loginAdmin(t *testing.T, router http.Handler) (*http.Cookie, string) {
 	t.Helper()
 
@@ -223,4 +247,23 @@ func loginAdmin(t *testing.T, router http.Handler) (*http.Cookie, string) {
 	}
 	t.Fatalf("expected admin session cookie")
 	return nil, ""
+}
+
+func loginCustomer(t *testing.T, router http.Handler) *http.Cookie {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/customer/login", strings.NewReader(`{"username":"buyer@example.com","password":"secret123"}`))
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected customer login status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == customerSessionCookie {
+			return cookie
+		}
+	}
+	t.Fatalf("expected customer session cookie")
+	return nil
 }

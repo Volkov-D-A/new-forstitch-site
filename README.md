@@ -40,6 +40,8 @@ make db-stop
 make db-reset
 make storage-start
 make storage-stop
+make mail-start
+make mail-stop
 make backend-run
 make frontend-run
 ```
@@ -60,3 +62,14 @@ make storage-start
 
 MinIO API доступен на `http://localhost:9000`, консоль — на `http://localhost:9001`.
 Локальные учетные данные: `forstitch` / `forstitch-secret`.
+
+## Dev Mail
+
+Для локального перехвата писем используется Mailpit.
+
+```bash
+make mail-start
+```
+
+SMTP доступен на `localhost:1025`, веб-интерфейс для просмотра писем — `http://localhost:8025`.
+Если backend будет запускаться внутри docker-сети, SMTP host нужно указывать как `mailpit`.

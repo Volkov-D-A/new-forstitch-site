@@ -46,12 +46,14 @@ POST http://localhost:3000/api/orders
     "title": "Маяк на мысе Анива",
     "price": 600,
     "cat": "landscape",
-    "sub": "Море",
     "img": "http://localhost:3000/api/files/products/lighthouse-aniva/1780000000000000000.jpg",
+    "images": [
+      { "id": 1, "url": "http://localhost:3000/api/files/products/lighthouse-aniva/1780000000000000001.jpg" }
+    ],
     "isNew": true,
     "size": "300 x 220 крестов",
     "colors": "58 цветов DMC",
-    "canvas": "Aida 16 / равномерка 32"
+    "description": "Пейзажная схема с мягкими переходами и морским светом."
   }
 ]
 ```
@@ -128,6 +130,8 @@ Endpoint обязателен для текущего фронтенда.
 
 ### `POST /orders`
 
+Требует входа покупателя через `forstitch_customer_session`.
+
 Запрос:
 
 ```json
@@ -143,14 +147,26 @@ Endpoint обязателен для текущего фронтенда.
 ```json
 {
   "id": "order_123",
-  "checkoutUrl": "https://pay.example.com/order_123",
-  "message": "Заказ создан"
+  "status": "paid",
+  "message": "Заказ оформлен и считается оплаченным."
 }
 ```
 
-- Если `checkoutUrl` есть, фронтенд перенаправит пользователя на оплату.
-- Если `checkoutUrl` нет, фронтенд покажет `message`, очистит корзину и закроет drawer.
+- Если покупатель не вошел, frontend перенаправит его в личный кабинет.
+- После успешного заказа frontend покажет `message`, очистит корзину и закроет drawer.
 - Если endpoint вернул ошибку, пользователь увидит toast, что оформление заказа пока не подключено.
+
+Регистрация покупателя:
+
+```http
+POST /customer/register/start
+POST /customer/register/verify
+POST /customer/password-reset/start
+POST /customer/password-reset/verify
+POST /customer/login
+GET  /customer/session
+GET  /customer/orders
+```
 
 ## Что уже готово
 
@@ -270,7 +286,6 @@ Backend возвращает ошибки в едином формате:
 ## Следующие шаги
 
 - Подключить отдельную загрузку товара через `GET /products/:productId` на странице карточки.
-- Добавить форму контактов в checkout, если заказ должен собирать email до оплаты.
 - Добавить серверную фильтрацию и пагинацию для большого каталога: `GET /products?category=&sort=&page=`.
 - Расширить admin API на галерею, блог, site-content и заказы.
 - При необходимости добавить runtime-схему валидации, например Zod, чтобы явно валидировать ответы API.

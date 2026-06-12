@@ -14,8 +14,7 @@ function ProductSpecs({ product, category }: ProductSpecsProps) {
     <dl className="spec-table">
       <div className="spec-row"><dt>Размер</dt><dd>{product.size}</dd></div>
       <div className="spec-row"><dt>Палитра</dt><dd>{product.colors}</dd></div>
-      <div className="spec-row"><dt>Рекомендуемая основа</dt><dd>{product.canvas}</dd></div>
-      <div className="spec-row"><dt>Категория</dt><dd>{category ? category.label : ''}{product.sub ? ' · ' + product.sub : ''}</dd></div>
+      <div className="spec-row"><dt>Категория</dt><dd>{category ? category.label : ''}</dd></div>
       <div className="spec-row"><dt>Формат</dt><dd>PDF: цветной ключ + символы</dd></div>
     </dl>
   );
@@ -85,6 +84,15 @@ export function ProductPage({ data, formatPrice, addToCart, isInCart }: ProductP
     .slice(0, 4);
   const inCart = isInCart(product.id);
   const openProduct = (id: string) => navigate(productPath(id));
+  const galleryImages = [
+    ...(product.img ? [{ id: 0, url: product.img }] : []),
+    ...(product.images || []),
+  ];
+  const [activeImage, setActiveImage] = React.useState(galleryImages[0]?.url || '');
+
+  React.useEffect(() => {
+    setActiveImage(galleryImages[0]?.url || '');
+  }, [product.id]);
 
   return (
     <div data-screen-label={'Товар: ' + product.title}>
@@ -97,16 +105,33 @@ export function ProductPage({ data, formatPrice, addToCart, isInCart }: ProductP
         </nav>
       </div>
       <div className="wrap product-layout with-bottom-space">
-        <div className="product-img">
-          {product.img
-            ? <SImg src={product.img} alt={product.title} />
-            : <div className="ph-img product-placeholder"><span className="x-mark">× × ×</span><span>фото готовится</span></div>}
+        <div>
+          <div className="product-img">
+            {activeImage
+              ? <SImg src={activeImage} alt={product.title} />
+              : <div className="ph-img product-placeholder"><span className="x-mark">× × ×</span><span>фото готовится</span></div>}
+          </div>
+          {galleryImages.length > 1 ? (
+            <div className="product-thumbs">
+              {galleryImages.map((image) => (
+                <button
+                  className={activeImage === image.url ? 'active' : ''}
+                  key={image.id}
+                  onClick={() => setActiveImage(image.url)}
+                  type="button"
+                >
+                  <SImg src={image.url} alt={product.title} />
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
         <div>
           {product.isNew ? <span className="pcard-badge product-badge-inline">Новинка</span> : null}
           <h1 className="h-sec product-title">{product.title}</h1>
           <p className="product-price">{formatPrice(product.price)}</p>
           <p className="product-subtitle">электронная схема · PDF · мгновенная доставка</p>
+          {product.description ? <p className="product-description">{product.description}</p> : null}
           <ProductSpecs product={product} category={category} />
           <div className="product-actions">
             <button

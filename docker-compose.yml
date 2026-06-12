@@ -47,6 +47,14 @@ services:
       mc mb --ignore-existing local/forstitch
       "
 
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: forstitch-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
 volumes:
   postgres_data:
   minio_data:

@@ -1,3 +1,4 @@
+export { AuthModal } from './AuthModal';
 export { CartDrawer } from './CartDrawer';
 export { EmptyState } from './EmptyState';
 export { Footer } from './Footer';

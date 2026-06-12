@@ -1,5 +1,5 @@
 import { API_BASE_URL } from './siteApi';
-import type { BlogPost, Category, GalleryItem, Product, SiteSettings, Testimonial } from '../types/site';
+import type { BlogPost, Category, CustomerOrder, GalleryItem, Product, SiteSettings, Testimonial } from '../types/site';
 
 interface APIErrorPayload {
   error?: {
@@ -196,6 +196,10 @@ export function getAdminSiteSettings(): Promise<SiteSettings> {
   return request<SiteSettings>('/admin/site-settings');
 }
 
+export function getAdminOrders(): Promise<CustomerOrder[]> {
+  return request<CustomerOrder[]>('/admin/orders');
+}
+
 export function updateAdminSiteSettings(csrfToken: string, settings: SiteSettings): Promise<SiteSettings> {
   return request<SiteSettings>('/admin/site-settings', {
     method: 'PUT',
@@ -266,6 +270,24 @@ export function uploadAdminProductImage(csrfToken: string, productId: string, fi
     method: 'POST',
     headers: csrfHeaders(csrfToken),
     body,
+  });
+}
+
+export function uploadAdminProductAdditionalImage(csrfToken: string, productId: string, file: File): Promise<Product> {
+  const body = new FormData();
+  body.append('file', file);
+
+  return request<Product>(`/admin/products/${productId}/images`, {
+    method: 'POST',
+    headers: csrfHeaders(csrfToken),
+    body,
+  });
+}
+
+export function deleteAdminProductImage(csrfToken: string, productId: string, imageId: number): Promise<void> {
+  return request<void>(`/admin/products/${productId}/images/${imageId}`, {
+    method: 'DELETE',
+    headers: csrfHeaders(csrfToken),
   });
 }
 

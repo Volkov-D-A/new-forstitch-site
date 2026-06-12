@@ -37,9 +37,7 @@ export function ProductCard({ product, categories, formatPrice, onOpen, onAdd, i
         {product.isNew ? <span className="pcard-badge">Новинка</span> : null}
       </div>
       <div className="pcard-body">
-        <span className="pcard-cat">
-          {category ? category.label : ''}{product.sub ? ' · ' + product.sub : ''}
-        </span>
+        <span className="pcard-cat">{category ? category.label : ''}</span>
         <h3 className="pcard-title">{product.title}</h3>
         <div className="pcard-foot">
           <span className="pcard-price">{formatPrice(product.price)}</span>

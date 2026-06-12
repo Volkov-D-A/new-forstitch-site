@@ -1,10 +1,11 @@
 // Корневое приложение forstitch redesign
 import React from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { CartDrawer, Footer, Header, Toast } from './components/index';
+import { AuthModal, CartDrawer, Footer, Header, Toast } from './components/index';
 import { useCart } from './hooks/useCart';
 import { useSiteData } from './hooks/useSiteData';
-import { AdminPage, BlogPage, BlogPostPage, GalleryPage, HomePage, HowToPage, ProductPage, ShopPage } from './pages/index';
+import { AccountPage, AdminPage, BlogPage, BlogPostPage, GalleryPage, HomePage, HowToPage, ProductPage, ShopPage } from './pages/index';
+import { getCustomerSession } from './services/customerApi';
 import { createOrder } from './services/siteApi';
 import { formatPrice } from './utils/currency';
 import { HOME_VARIANT } from './utils/homeContent';
@@ -52,12 +53,28 @@ function PublicApp() {
     onAdded: (product) => showToast('«' + (product ? product.title : '') + '» — в корзине'),
   });
   const [isCheckoutLoading, setCheckoutLoading] = React.useState(false);
+  const [isAuthOpen, setAuthOpen] = React.useState(false);
+
+  const openAccount = async () => {
+    const session = await getCustomerSession();
+    if (session.authenticated) {
+      navigate(ROUTES.account);
+    } else {
+      setAuthOpen(true);
+    }
+  };
 
   const checkout = async () => {
     if (cart.length === 0 || isCheckoutLoading) return;
 
     setCheckoutLoading(true);
     try {
+      const session = await getCustomerSession();
+      if (!session.authenticated) {
+        setAuthOpen(true);
+        showToast('Войдите или зарегистрируйтесь для оформления заказа');
+        return;
+      }
       const order = await createOrder({ items: cart });
       if (order.checkoutUrl) {
         window.location.assign(order.checkoutUrl);
@@ -92,13 +109,14 @@ function PublicApp() {
 
   return (
     <React.Fragment>
-      <Header cartCount={cartCount} onCart={openCart} categories={data.categories} products={data.products} />
+      <Header cartCount={cartCount} onAccount={openAccount} onCart={openCart} categories={data.categories} products={data.products} />
       <main>
         <Routes>
           <Route path={ROUTES.home} element={<HomePage variant={HOME_VARIANT} addToCart={addToCart} isInCart={isInCart} data={data} formatPrice={formatPrice} />} />
           <Route path={ROUTES.shop} element={<ShopPage addToCart={addToCart} isInCart={isInCart} data={data} formatPrice={formatPrice} />} />
           <Route path="/shop/:categoryId" element={<ShopPage addToCart={addToCart} isInCart={isInCart} data={data} formatPrice={formatPrice} />} />
           <Route path="/product/:productId" element={<ProductPage addToCart={addToCart} isInCart={isInCart} data={data} formatPrice={formatPrice} />} />
+          <Route path={ROUTES.account} element={<AccountPage onAuthRequired={() => setAuthOpen(true)} />} />
           <Route path={ROUTES.gallery} element={<GalleryPage data={data} />} />
           <Route path={ROUTES.blog} element={<BlogPage data={data} />} />
           <Route path="/blog/:postId" element={<BlogPostPage data={data} />} />
@@ -125,6 +143,7 @@ function PublicApp() {
         />
       ) : null}
       {toast ? <Toast text={toast} /> : null}
+      <AuthModal isOpen={isAuthOpen} onClose={() => setAuthOpen(false)} onAuthenticated={() => showToast('Вы вошли в личный кабинет')} />
     </React.Fragment>
   );
 }

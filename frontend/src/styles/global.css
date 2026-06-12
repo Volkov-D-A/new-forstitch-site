@@ -329,6 +329,22 @@ button { font-family: var(--font-body); cursor: pointer; }
   background: var(--paper); box-shadow: var(--shadow-sm);
 }
 .product-img img { width: 100%; aspect-ratio: 1/1; object-fit: cover; }
+.product-thumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.product-thumbs button {
+  aspect-ratio: 1;
+  border: 2px solid transparent;
+  border-radius: var(--r);
+  background: var(--paper);
+  padding: 0;
+  overflow: hidden;
+}
+.product-thumbs button.active { border-color: var(--accent); }
+.product-thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .spec-table { display: flex; flex-direction: column; margin: 26px 0; }
 .spec-row { display: flex; justify-content: space-between; gap: 18px; padding: 13px 2px; border-bottom: 1px dashed var(--line-strong); font-size: 15px; }
 .spec-row dt { color: var(--muted); margin: 0; }
@@ -338,6 +354,7 @@ button { font-family: var(--font-body); cursor: pointer; }
 .product-title { font-size: clamp(28px, 3.4vw, 40px); }
 .product-price { font-size: 26px; font-weight: 800; margin: 16px 0 4px; }
 .product-subtitle { color: var(--muted); font-size: 14px; margin: 0; }
+.product-description { margin: 18px 0 0; color: var(--ink-soft); line-height: 1.65; }
 .product-actions { display: flex; gap: 14px; flex-wrap: wrap; }
 .product-note { margin-top: 30px; }
 .product-note-text { font-size: 13.5px; color: var(--muted); }
@@ -463,6 +480,137 @@ button { font-family: var(--font-body); cursor: pointer; }
 }
 .empty-state p { margin: 0; color: var(--ink-soft); max-width: 520px; }
 
+.account-page { padding: 56px 32px 82px; }
+.account-head { max-width: 640px; margin-bottom: 24px; }
+.account-auth-tabs {
+  display: inline-flex;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--paper);
+  padding: 4px;
+  margin-bottom: 14px;
+}
+.account-auth-tabs button {
+  border: none;
+  border-radius: calc(var(--r) - 2px);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 800;
+  padding: 9px 14px;
+}
+.account-auth-tabs button.active { background: var(--ink); color: var(--linen); }
+.auth-modal-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(43,36,29,.42);
+}
+.auth-modal {
+  width: min(440px, 100%);
+  max-height: min(720px, 92vh);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--paper);
+  box-shadow: var(--shadow-md);
+  padding: 18px;
+}
+.auth-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.auth-modal-head h2 { margin: 0; font-size: 22px; }
+.auth-form { border: none; padding: 0; max-width: none; }
+.auth-link {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-weight: 800;
+  padding: 4px;
+}
+.account-login {
+  max-width: 430px;
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--paper);
+  padding: 20px;
+}
+.account-login label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+}
+.account-login input {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: #fff;
+  padding: 11px 12px;
+  color: var(--ink);
+  font: inherit;
+}
+.account-login input:focus { outline: none; border-color: var(--accent); }
+.account-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+.account-orders { display: grid; gap: 16px; }
+.account-order {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--paper);
+  overflow: hidden;
+}
+.account-order-head,
+.account-order-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 16px;
+}
+.account-order-head { border-bottom: 1px solid var(--line); }
+.account-order-head h2 { margin: 0; font-size: 16px; }
+.account-order-head p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.account-order-items { display: grid; }
+.account-order-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px dashed var(--line);
+}
+.account-order-item div { display: grid; gap: 3px; }
+.account-order-item span { color: var(--muted); font-size: 13px; }
+.account-order-foot { background: var(--linen); }
+.account-order-foot span { color: var(--ink-soft); font-size: 13.5px; }
+.order-status {
+  border-radius: 4px;
+  padding: 5px 9px;
+  background: var(--linen);
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 800;
+}
+.status-paid, .status-fulfilled { background: #E7F0E5; color: var(--green); }
+.status-payment_failed, .status-cancelled { background: #F8E5E1; color: var(--terracotta-deep); }
+
 /* ============ админка ============ */
 .admin-shell {
   min-height: 100vh;
@@ -478,6 +626,15 @@ button { font-family: var(--font-body); cursor: pointer; }
 }
 .admin-brand { display: flex; flex-direction: column; gap: 2px; margin-bottom: 28px; }
 .admin-kicker { font-size: 11px; font-weight: 800; letter-spacing: .16em; color: var(--muted); text-transform: uppercase; }
+.admin-nav-group { display: grid; gap: 6px; margin-bottom: 22px; }
+.admin-nav-label {
+  padding: 0 12px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
 .admin-nav-item {
   width: 100%;
   text-align: left;
@@ -552,6 +709,9 @@ button { font-family: var(--font-body); cursor: pointer; }
 }
 .admin-table th, .admin-table td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .admin-table code { font-size: 12px; color: var(--ink-soft); }
+.admin-muted { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.admin-order-items { display: grid; gap: 4px; min-width: 220px; }
+.admin-order-items span { color: var(--ink-soft); }
 .admin-row-actions { white-space: nowrap; text-align: right; }
 .admin-row-actions button {
   border: none;
@@ -564,6 +724,7 @@ button { font-family: var(--font-body); cursor: pointer; }
 .admin-row-actions button:hover { color: var(--accent-deep); }
 .admin-form { padding: 16px; display: grid; gap: 12px; }
 .admin-form.product { grid-template-columns: 1fr 1fr; }
+.admin-form-wide { grid-column: 1 / -1; }
 .admin-form label { display: grid; gap: 5px; font-size: 12px; font-weight: 800; color: var(--muted); }
 .admin-form input, .admin-form select, .admin-form textarea {
   width: 100%;
@@ -590,6 +751,27 @@ button { font-family: var(--font-body); cursor: pointer; }
   font-size: 12px;
   font-weight: 700;
 }
+.admin-product-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+  gap: 10px;
+}
+.admin-product-image { display: grid; gap: 6px; }
+.admin-product-image img {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  object-fit: cover;
+}
+.admin-product-image button {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0;
+}
 .admin-check {
   display: flex !important;
   grid-column: 1 / -1;
@@ -611,6 +793,9 @@ button { font-family: var(--font-body); cursor: pointer; }
   .admin-brand { margin: 0 18px 0 0; }
   .admin-nav-item { width: auto; }
   .admin-grid, .admin-grid.two { grid-template-columns: 1fr; }
+  .account-page { padding: 42px 20px 64px; }
+  .account-top, .account-order-head, .account-order-foot, .account-order-item { align-items: flex-start; flex-direction: column; }
+  .account-login { max-width: none; }
 }
 @media (max-width: 760px) {
   .wrap { padding: 0 20px; }

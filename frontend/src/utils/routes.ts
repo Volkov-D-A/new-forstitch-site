@@ -3,6 +3,7 @@ import type { CategoryId } from '../types/site';
 export const ROUTES = {
   home: '/',
   shop: '/shop',
+  account: '/account',
   gallery: '/gallery',
   blog: '/blog',
   howToBuy: '/how-to-buy',

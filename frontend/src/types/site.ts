@@ -10,13 +10,18 @@ export interface Product {
   title: string;
   price: number;
   cat: CategoryId;
-  sub: string;
   img?: string;
+  images?: ProductImage[];
   ph?: string;
   isNew?: boolean;
   size: string;
   colors: string;
-  canvas: string;
+  description?: string;
+}
+
+export interface ProductImage {
+  id: number;
+  url: string;
 }
 
 export interface Testimonial {
@@ -89,6 +94,31 @@ export interface OrderResponse {
   id: string;
   checkoutUrl?: string;
   message?: string;
+  status?: string;
+}
+
+export interface OrderItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  price: number;
+  downloadUrl?: string;
+}
+
+export interface CustomerOrder {
+  id: string;
+  status: string;
+  customerEmail: string;
+  customerName?: string;
+  message?: string;
+  items: OrderItem[];
+  createdAt: string;
+}
+
+export interface CustomerSession {
+  authenticated: boolean;
+  email?: string;
+  name?: string;
 }
 
 export type FormatPrice = (price: number) => string;

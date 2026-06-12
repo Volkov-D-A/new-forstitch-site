@@ -11,6 +11,7 @@ import (
 
 	"new-forstitch-site/backend/internal/api"
 	"new-forstitch-site/backend/internal/db"
+	"new-forstitch-site/backend/internal/mailer"
 	"new-forstitch-site/backend/internal/repository"
 	"new-forstitch-site/backend/internal/services"
 	"new-forstitch-site/backend/internal/storage"
@@ -28,6 +29,14 @@ func main() {
 	minioBucket := env("MINIO_BUCKET", "forstitch")
 	minioUseSSL := envBool("MINIO_USE_SSL", false)
 	fileBaseURL := env("FILE_BASE_URL", "http://localhost:3000/api/files")
+	appBaseURL := env("APP_BASE_URL", "http://localhost:3000")
+	mailEnabled := envBool("MAIL_ENABLED", false)
+	mailHost := env("MAIL_HOST", "localhost")
+	mailPort := env("MAIL_PORT", "1025")
+	mailUsername := env("MAIL_USERNAME", "")
+	mailPassword := env("MAIL_PASSWORD", "")
+	mailFrom := env("MAIL_FROM", "no-reply@forstitch.local")
+	mailFromName := env("MAIL_FROM_NAME", "Forstitch")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -51,6 +60,18 @@ func main() {
 		log.Fatal(err)
 	}
 	service.ConfigureFiles(fileStorage, fileBaseURL)
+	if mailEnabled {
+		service.ConfigureMailer(mailer.SMTP{
+			Host:     mailHost,
+			Port:     mailPort,
+			Username: mailUsername,
+			Password: mailPassword,
+			From:     mailFrom,
+			FromName: mailFromName,
+		}, appBaseURL)
+	} else {
+		service.ConfigureMailer(mailer.Noop{}, appBaseURL)
+	}
 	if err := service.EnsureAdminUser(adminUsername, adminPassword); err != nil {
 		log.Fatal(err)
 	}

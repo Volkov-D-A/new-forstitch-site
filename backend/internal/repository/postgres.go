@@ -79,7 +79,6 @@ func (s *PostgresRepository) Products() []models.Product {
 		       title,
 		       price,
 		       cat,
-		       sub,
 		       img,
 		       id IN (
 		         SELECT id
@@ -90,7 +89,7 @@ func (s *PostgresRepository) Products() []models.Product {
 		       ) AS is_new,
 		       size,
 		       colors,
-		       canvas
+		       description
 		FROM products
 		WHERE published = true
 		ORDER BY sort_order, title
@@ -106,6 +105,7 @@ func (s *PostgresRepository) Products() []models.Product {
 		if err != nil {
 			return nil
 		}
+		product.Images = s.productImages(product.ID)
 		products = append(products, product)
 	}
 	return products
@@ -117,7 +117,6 @@ func (s *PostgresRepository) Product(id string) (models.Product, error) {
 		       title,
 		       price,
 		       cat,
-		       sub,
 		       img,
 		       id IN (
 		         SELECT id
@@ -128,7 +127,7 @@ func (s *PostgresRepository) Product(id string) (models.Product, error) {
 		       ) AS is_new,
 		       size,
 		       colors,
-		       canvas
+		       description
 		FROM products
 		WHERE id = $1 AND published = true
 	`, id)
@@ -140,14 +139,15 @@ func (s *PostgresRepository) Product(id string) (models.Product, error) {
 	if err != nil {
 		return models.Product{}, err
 	}
+	product.Images = s.productImages(product.ID)
 	return product, nil
 }
 
 func (s *PostgresRepository) CreateProduct(product models.Product) error {
 	_, err := s.db.ExecContext(context.Background(), `
-		INSERT INTO products (id, title, price, cat, sub, img, size, colors, canvas)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	`, product.ID, product.Title, product.Price, product.Cat, product.Sub, product.Img, product.Size, product.Colors, product.Canvas)
+		INSERT INTO products (id, title, price, cat, img, size, colors, description)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`, product.ID, product.Title, product.Price, product.Cat, product.Img, product.Size, product.Colors, product.Description)
 	return mapPostgresError(err)
 }
 
@@ -157,14 +157,13 @@ func (s *PostgresRepository) UpdateProduct(id string, product models.Product) er
 		SET title = $2,
 		    price = $3,
 		    cat = $4,
-		    sub = $5,
-		    img = $6,
-		    size = $7,
-		    colors = $8,
-		    canvas = $9,
+		    img = $5,
+		    size = $6,
+		    colors = $7,
+		    description = $8,
 		    updated_at = now()
 		WHERE id = $1
-	`, id, product.Title, product.Price, product.Cat, product.Sub, product.Img, product.Size, product.Colors, product.Canvas)
+	`, id, product.Title, product.Price, product.Cat, product.Img, product.Size, product.Colors, product.Description)
 	if err != nil {
 		return mapPostgresError(err)
 	}
@@ -182,6 +181,27 @@ func (s *PostgresRepository) UpdateProductImage(id string, imageURL string) erro
 		return mapPostgresError(err)
 	}
 	return requireAffected(result, "product_not_found", "product not found")
+}
+
+func (s *PostgresRepository) AddProductImage(productID string, imageURL string) (models.ProductImage, error) {
+	var image models.ProductImage
+	err := s.db.QueryRowContext(context.Background(), `
+		INSERT INTO product_images (product_id, url, sort_order)
+		VALUES ($1, $2, COALESCE((SELECT max(sort_order) + 10 FROM product_images WHERE product_id = $1), 10))
+		RETURNING id, url
+	`, productID, imageURL).Scan(&image.ID, &image.URL)
+	return image, mapPostgresError(err)
+}
+
+func (s *PostgresRepository) DeleteProductImage(productID string, imageID int64) error {
+	result, err := s.db.ExecContext(context.Background(), `
+		DELETE FROM product_images
+		WHERE product_id = $1 AND id = $2
+	`, productID, imageID)
+	if err != nil {
+		return mapPostgresError(err)
+	}
+	return requireAffected(result, "product_image_not_found", "product image not found")
 }
 
 func (s *PostgresRepository) DeleteProduct(id string) error {
@@ -393,21 +413,24 @@ func (s *PostgresRepository) UpdateSiteSettings(settings models.SiteSettings) er
 	return requireAffected(result, "site_content_not_found", "site content not found")
 }
 
-func (s *PostgresRepository) CreateOrder(req models.OrderRequest) models.OrderResponse {
+func (s *PostgresRepository) CreateOrder(req models.OrderRequest, customer models.CustomerUser) (models.OrderResponse, error) {
 	ctx := context.Background()
 	orderID := fmt.Sprintf("order_%d", time.Now().UnixNano())
-	message := "Заказ создан. Оплата будет подключена позже."
+	message := "Заказ оформлен и считается оплаченным."
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return models.OrderResponse{ID: orderID, Message: "Не удалось создать заказ."}
+		return models.OrderResponse{}, err
 	}
 	defer tx.Rollback()
 
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO orders (id, message) VALUES ($1, $2)
-	`, orderID, message); err != nil {
-		return models.OrderResponse{ID: orderID, Message: "Не удалось создать заказ."}
+		INSERT INTO orders (
+			id, status, message, customer_id, customer_email, customer_name
+		)
+		VALUES ($1, 'paid', $2, $3, $4, $5)
+	`, orderID, message, customer.ID, customer.Email, customer.Name); err != nil {
+		return models.OrderResponse{}, mapPostgresError(err)
 	}
 
 	for _, item := range req.Items {
@@ -415,22 +438,146 @@ func (s *PostgresRepository) CreateOrder(req models.OrderRequest) models.OrderRe
 		if err := tx.QueryRowContext(ctx, `
 			SELECT price FROM products WHERE id = $1 AND published = true
 		`, item.ProductID).Scan(&price); err != nil {
-			return models.OrderResponse{ID: orderID, Message: "Не удалось создать заказ."}
+			if err == sql.ErrNoRows {
+				return models.OrderResponse{}, models.NotFound("product_not_found", "product not found")
+			}
+			return models.OrderResponse{}, err
 		}
 
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO order_items (order_id, product_id, quantity, price)
 			VALUES ($1, $2, $3, $4)
 		`, orderID, item.ProductID, item.Quantity, price); err != nil {
-			return models.OrderResponse{ID: orderID, Message: "Не удалось создать заказ."}
+			return models.OrderResponse{}, mapPostgresError(err)
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		return models.OrderResponse{ID: orderID, Message: "Не удалось создать заказ."}
+		return models.OrderResponse{}, err
 	}
 
-	return models.OrderResponse{ID: orderID, Message: message}
+	return models.OrderResponse{ID: orderID, Status: "paid", Message: message}, nil
+}
+
+func (s *PostgresRepository) Orders() ([]models.Order, error) {
+	rows, err := s.db.QueryContext(context.Background(), `
+		SELECT id, status, customer_email, customer_name, message, created_at
+		FROM orders
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var orders []models.Order
+	for rows.Next() {
+		order, err := scanOrder(rows)
+		if err != nil {
+			return nil, err
+		}
+		items, err := s.orderItems(order.ID, order.Status)
+		if err != nil {
+			return nil, err
+		}
+		order.Items = items
+		orders = append(orders, order)
+	}
+	return orders, rows.Err()
+}
+
+func (s *PostgresRepository) CustomerOrders(customerID int64) ([]models.Order, error) {
+	rows, err := s.db.QueryContext(context.Background(), `
+		SELECT id, status, customer_email, customer_name, message, created_at
+		FROM orders
+		WHERE customer_id = $1
+		ORDER BY created_at DESC
+	`, customerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var orders []models.Order
+	for rows.Next() {
+		order, err := scanOrder(rows)
+		if err != nil {
+			return nil, err
+		}
+		items, err := s.orderItems(order.ID, order.Status)
+		if err != nil {
+			return nil, err
+		}
+		order.Items = items
+		orders = append(orders, order)
+	}
+	return orders, rows.Err()
+}
+
+func (s *PostgresRepository) OrderForCustomer(orderID string, customerID int64) (models.Order, error) {
+	return s.orderByQuery(`
+		SELECT id, status, customer_email, customer_name, message, created_at
+		FROM orders
+		WHERE id = $1 AND customer_id = $2
+	`, orderID, customerID)
+}
+
+func (s *PostgresRepository) orderByQuery(query string, args ...any) (models.Order, error) {
+	row := s.db.QueryRowContext(context.Background(), query, args...)
+	order, err := scanOrder(row)
+	if err == sql.ErrNoRows {
+		return models.Order{}, models.NotFound("order_not_found", "order not found")
+	}
+	if err != nil {
+		return models.Order{}, err
+	}
+	items, err := s.orderItems(order.ID, order.Status)
+	if err != nil {
+		return models.Order{}, err
+	}
+	order.Items = items
+	return order, nil
+}
+
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanOrder(row rowScanner) (models.Order, error) {
+	var order models.Order
+	var createdAt time.Time
+	if err := row.Scan(&order.ID, &order.Status, &order.CustomerEmail, &order.CustomerName, &order.Message, &createdAt); err != nil {
+		return models.Order{}, err
+	}
+	order.CreatedAt = createdAt.Format(time.RFC3339)
+	return order, nil
+}
+
+func (s *PostgresRepository) orderItems(orderID string, status string) ([]models.OrderItem, error) {
+	rows, err := s.db.QueryContext(context.Background(), `
+		SELECT oi.product_id, p.title, oi.quantity, oi.price
+		FROM order_items oi
+		JOIN products p ON p.id = oi.product_id
+		WHERE oi.order_id = $1
+		ORDER BY p.title
+	`, orderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []models.OrderItem
+	for rows.Next() {
+		var item models.OrderItem
+		if err := rows.Scan(&item.ProductID, &item.ProductName, &item.Quantity, &item.Price); err != nil {
+			return nil, err
+		}
+		if status == "paid" || status == "fulfilled" {
+			item.DownloadURL = fmt.Sprintf("/api/customer/orders/%s/downloads/%s", orderID, item.ProductID)
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }
 
 func (s *PostgresRepository) AdminUserByUsername(username string) (models.AdminUser, error) {
@@ -495,6 +642,223 @@ func (s *PostgresRepository) DeleteExpiredAdminSessions(now time.Time) error {
 	return err
 }
 
+func (s *PostgresRepository) CustomerByEmail(email string) (models.CustomerUser, error) {
+	var user models.CustomerUser
+	err := s.db.QueryRowContext(context.Background(), `
+		SELECT id, email, name, password_hash
+		FROM customer_users
+		WHERE email = $1
+	`, email).Scan(&user.ID, &user.Email, &user.Name, &user.PasswordHash)
+	if err == sql.ErrNoRows {
+		return models.CustomerUser{}, models.NotFound("customer_not_found", "customer not found")
+	}
+	return user, err
+}
+
+func (s *PostgresRepository) EnsureCustomer(email string, name string, passwordHash string) (models.CustomerUser, bool, error) {
+	existing, err := s.CustomerByEmail(email)
+	if err == nil {
+		if name != "" && name != existing.Name {
+			_, updateErr := s.db.ExecContext(context.Background(), `
+				UPDATE customer_users
+				SET name = $2, updated_at = now()
+				WHERE id = $1
+			`, existing.ID, name)
+			if updateErr != nil {
+				return models.CustomerUser{}, false, mapPostgresError(updateErr)
+			}
+			existing.Name = name
+		}
+		return existing, false, nil
+	}
+	if !errors.Is(err, models.ErrNotFound) {
+		return models.CustomerUser{}, false, err
+	}
+
+	var user models.CustomerUser
+	err = s.db.QueryRowContext(context.Background(), `
+		INSERT INTO customer_users (email, name, password_hash)
+		VALUES ($1, $2, $3)
+		RETURNING id, email, name, password_hash
+	`, email, name, passwordHash).Scan(&user.ID, &user.Email, &user.Name, &user.PasswordHash)
+	if err != nil {
+		return models.CustomerUser{}, false, mapPostgresError(err)
+	}
+	return user, true, nil
+}
+
+func (s *PostgresRepository) SaveCustomerRegistrationCode(email string, name string, passwordHash string, codeHash string, expiresAt time.Time) error {
+	_, err := s.db.ExecContext(context.Background(), `
+		INSERT INTO customer_registration_codes (email, name, password_hash, code_hash, expires_at)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (email) DO UPDATE
+		SET name = EXCLUDED.name,
+		    password_hash = EXCLUDED.password_hash,
+		    code_hash = EXCLUDED.code_hash,
+		    expires_at = EXCLUDED.expires_at,
+		    created_at = now()
+	`, email, name, passwordHash, codeHash, expiresAt)
+	return mapPostgresError(err)
+}
+
+func (s *PostgresRepository) CustomerByRegistrationCode(email string, codeHash string, now time.Time) (models.CustomerUser, error) {
+	ctx := context.Background()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return models.CustomerUser{}, err
+	}
+	defer tx.Rollback()
+
+	var name string
+	var passwordHash string
+	err = tx.QueryRowContext(ctx, `
+		SELECT name, password_hash
+		FROM customer_registration_codes
+		WHERE email = $1 AND code_hash = $2 AND expires_at > $3
+	`, email, codeHash, now).Scan(&name, &passwordHash)
+	if err == sql.ErrNoRows {
+		return models.CustomerUser{}, models.NotFound("registration_code_not_found", "registration code not found")
+	}
+	if err != nil {
+		return models.CustomerUser{}, err
+	}
+
+	var user models.CustomerUser
+	err = tx.QueryRowContext(ctx, `
+		INSERT INTO customer_users (email, name, password_hash)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (email) DO UPDATE
+		SET name = CASE WHEN EXCLUDED.name <> '' THEN EXCLUDED.name ELSE customer_users.name END,
+		    updated_at = now()
+		RETURNING id, email, name, password_hash
+	`, email, name, passwordHash).Scan(&user.ID, &user.Email, &user.Name, &user.PasswordHash)
+	if err != nil {
+		return models.CustomerUser{}, mapPostgresError(err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM customer_registration_codes
+		WHERE email = $1
+	`, email); err != nil {
+		return models.CustomerUser{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return models.CustomerUser{}, err
+	}
+	return user, nil
+}
+
+func (s *PostgresRepository) DeleteCustomerRegistrationCode(email string) error {
+	_, err := s.db.ExecContext(context.Background(), `
+		DELETE FROM customer_registration_codes
+		WHERE email = $1
+	`, email)
+	return err
+}
+
+func (s *PostgresRepository) SaveCustomerPasswordResetCode(email string, codeHash string, expiresAt time.Time) error {
+	_, err := s.db.ExecContext(context.Background(), `
+		INSERT INTO customer_password_reset_codes (email, code_hash, expires_at)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (email) DO UPDATE
+		SET code_hash = EXCLUDED.code_hash,
+		    expires_at = EXCLUDED.expires_at,
+		    created_at = now()
+	`, email, codeHash, expiresAt)
+	return mapPostgresError(err)
+}
+
+func (s *PostgresRepository) UpdateCustomerPasswordByResetCode(email string, codeHash string, passwordHash string, now time.Time) (models.CustomerUser, error) {
+	ctx := context.Background()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return models.CustomerUser{}, err
+	}
+	defer tx.Rollback()
+
+	var exists bool
+	err = tx.QueryRowContext(ctx, `
+		SELECT true
+		FROM customer_password_reset_codes
+		WHERE email = $1 AND code_hash = $2 AND expires_at > $3
+	`, email, codeHash, now).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return models.CustomerUser{}, models.NotFound("password_reset_code_not_found", "password reset code not found")
+	}
+	if err != nil {
+		return models.CustomerUser{}, err
+	}
+
+	var user models.CustomerUser
+	err = tx.QueryRowContext(ctx, `
+		UPDATE customer_users
+		SET password_hash = $2, updated_at = now()
+		WHERE email = $1
+		RETURNING id, email, name, password_hash
+	`, email, passwordHash).Scan(&user.ID, &user.Email, &user.Name, &user.PasswordHash)
+	if err == sql.ErrNoRows {
+		return models.CustomerUser{}, models.NotFound("customer_not_found", "customer not found")
+	}
+	if err != nil {
+		return models.CustomerUser{}, mapPostgresError(err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM customer_password_reset_codes
+		WHERE email = $1
+	`, email); err != nil {
+		return models.CustomerUser{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return models.CustomerUser{}, err
+	}
+	return user, nil
+}
+
+func (s *PostgresRepository) DeleteCustomerPasswordResetCode(email string) error {
+	_, err := s.db.ExecContext(context.Background(), `
+		DELETE FROM customer_password_reset_codes
+		WHERE email = $1
+	`, email)
+	return err
+}
+
+func (s *PostgresRepository) CreateCustomerSession(session models.CustomerSession, expiresAt time.Time) error {
+	_, err := s.db.ExecContext(context.Background(), `
+		INSERT INTO customer_sessions (id, user_id, expires_at)
+		VALUES ($1, $2, $3)
+	`, session.ID, session.UserID, expiresAt)
+	return mapPostgresError(err)
+}
+
+func (s *PostgresRepository) CustomerSession(sessionID string, now time.Time) (models.CustomerSession, error) {
+	var session models.CustomerSession
+	err := s.db.QueryRowContext(context.Background(), `
+		SELECT s.id, s.user_id, u.email, u.name
+		FROM customer_sessions s
+		JOIN customer_users u ON u.id = s.user_id
+		WHERE s.id = $1 AND s.expires_at > $2
+	`, sessionID, now).Scan(&session.ID, &session.UserID, &session.Email, &session.Name)
+	if err == sql.ErrNoRows {
+		return models.CustomerSession{}, models.Unauthorized("session_invalid", "customer session is invalid")
+	}
+	return session, err
+}
+
+func (s *PostgresRepository) DeleteCustomerSession(sessionID string) error {
+	_, err := s.db.ExecContext(context.Background(), `
+		DELETE FROM customer_sessions
+		WHERE id = $1
+	`, sessionID)
+	return err
+}
+
+func (s *PostgresRepository) DeleteExpiredCustomerSessions(now time.Time) error {
+	_, err := s.db.ExecContext(context.Background(), `
+		DELETE FROM customer_sessions
+		WHERE expires_at <= $1
+	`, now)
+	return err
+}
+
 type productScanner interface {
 	Scan(dest ...any) error
 }
@@ -506,14 +870,36 @@ func scanProduct(scanner productScanner) (models.Product, error) {
 		&product.Title,
 		&product.Price,
 		&product.Cat,
-		&product.Sub,
 		&product.Img,
 		&product.IsNew,
 		&product.Size,
 		&product.Colors,
-		&product.Canvas,
+		&product.Description,
 	)
 	return product, err
+}
+
+func (s *PostgresRepository) productImages(productID string) []models.ProductImage {
+	rows, err := s.db.QueryContext(context.Background(), `
+		SELECT id, url
+		FROM product_images
+		WHERE product_id = $1
+		ORDER BY sort_order, id
+	`, productID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var images []models.ProductImage
+	for rows.Next() {
+		var image models.ProductImage
+		if err := rows.Scan(&image.ID, &image.URL); err != nil {
+			return nil
+		}
+		images = append(images, image)
+	}
+	return images
 }
 
 func (s *PostgresRepository) howToSteps() []models.HowToStep {

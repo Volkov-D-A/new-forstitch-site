@@ -15,6 +15,7 @@ type SiteContentResponse = Pick<SiteData, 'author' | 'featuredProductId' | 'howT
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
+    credentials: init?.credentials || 'include',
     headers: {
       Accept: 'application/json',
       ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
@@ -43,12 +44,12 @@ function normalizeProduct(product: Product): Product {
     title: product.title || 'Схема без названия',
     price: Number(product.price) || 0,
     cat: String(product.cat),
-    sub: product.sub || '',
     img: product.img || undefined,
+    images: Array.isArray(product.images) ? product.images : [],
     isNew: Boolean(product.isNew),
     size: product.size || '',
     colors: product.colors || '',
-    canvas: product.canvas || '',
+    description: product.description || '',
   };
 }
 

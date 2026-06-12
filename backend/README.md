@@ -70,6 +70,15 @@ GET  /api/gallery
 GET  /api/blog
 GET  /api/site-content
 POST /api/orders
+POST /api/customer/register/start
+POST /api/customer/register/verify
+POST /api/customer/password-reset/start
+POST /api/customer/password-reset/verify
+POST /api/customer/login
+GET  /api/customer/session
+POST /api/customer/logout
+GET  /api/customer/orders
+GET  /api/customer/orders/{orderID}
 POST /api/auth/login
 GET  /api/auth/session
 POST /api/auth/logout
@@ -82,6 +91,8 @@ GET    /api/admin/products
 POST   /api/admin/products
 PUT    /api/admin/products/{productID}
 POST   /api/admin/products/{productID}/image
+POST   /api/admin/products/{productID}/images
+DELETE /api/admin/products/{productID}/images/{imageID}
 DELETE /api/admin/products/{productID}
 GET    /api/admin/blog
 POST   /api/admin/blog
@@ -95,6 +106,7 @@ POST   /api/admin/gallery/{galleryItemID}/image
 DELETE /api/admin/gallery/{galleryItemID}
 GET    /api/admin/site-settings
 PUT    /api/admin/site-settings
+GET    /api/admin/orders
 GET    /api/admin/testimonials
 POST   /api/admin/testimonials
 PUT    /api/admin/testimonials/{testimonialID}
@@ -128,6 +140,20 @@ curl -X POST http://localhost:3000/api/admin/categories \
 
 При создании категорий и товаров `id` генерируется backend-ом в формате UUID. В `PUT`/`DELETE` используется уже существующий `id` из URL.
 Поле товара `isNew` вычисляется backend-ом автоматически: новинками считаются последние 4 добавленных опубликованных товара.
+
+Оформление заказа доступно только покупателю с cookie `forstitch_customer_session`.
+Для регистрации покупатель вводит email, имя и пароль, получает код на почту через
+`/api/customer/register/start`, затем подтверждает код через `/api/customer/register/verify`.
+Восстановление пароля устроено так же: `/api/customer/password-reset/start` отправляет код,
+`/api/customer/password-reset/verify` принимает код и новый пароль.
+
+Временный платежный режим: заказ авторизованного покупателя сразу считается оплаченным.
+Ссылки на скачивание доступны в личном кабинете; письмом они не отправляются.
+
+```bash
+curl http://localhost:3000/api/admin/orders \
+  --cookie 'forstitch_admin_session=<session>'
+```
 
 Настройки главной страницы:
 
@@ -165,6 +191,15 @@ curl -X POST http://localhost:3000/api/admin/products/lighthouse_aniva/image \
 ```
 
 Backend сохраняет файл в MinIO и обновляет поле товара `img` публичным URL вида `http://localhost:3000/api/files/products/...`.
+
+Дополнительные изображения товара загружаются отдельными multipart-запросами:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/products/lighthouse_aniva/images \
+  --cookie 'forstitch_admin_session=<session>' \
+  -H 'X-CSRF-Token: <csrfToken>' \
+  -F 'file=@/path/to/detail.jpg'
+```
 
 Payload для записей блога:
 

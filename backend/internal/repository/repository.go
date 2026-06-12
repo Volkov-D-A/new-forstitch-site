@@ -16,6 +16,8 @@ type CatalogRepository interface {
 	CreateProduct(product models.Product) error
 	UpdateProduct(id string, product models.Product) error
 	UpdateProductImage(id string, imageURL string) error
+	AddProductImage(productID string, imageURL string) (models.ProductImage, error)
+	DeleteProductImage(productID string, imageID int64) error
 	DeleteProduct(id string) error
 }
 
@@ -40,7 +42,10 @@ type ContentRepository interface {
 }
 
 type OrderRepository interface {
-	CreateOrder(req models.OrderRequest) models.OrderResponse
+	CreateOrder(req models.OrderRequest, customer models.CustomerUser) (models.OrderResponse, error)
+	Orders() ([]models.Order, error)
+	CustomerOrders(customerID int64) ([]models.Order, error)
+	OrderForCustomer(orderID string, customerID int64) (models.Order, error)
 }
 
 type Repository interface {
@@ -57,4 +62,16 @@ type AuthRepository interface {
 	AdminSession(sessionID string, now time.Time) (models.AdminSession, error)
 	DeleteAdminSession(sessionID string) error
 	DeleteExpiredAdminSessions(now time.Time) error
+	CustomerByEmail(email string) (models.CustomerUser, error)
+	EnsureCustomer(email string, name string, passwordHash string) (models.CustomerUser, bool, error)
+	SaveCustomerRegistrationCode(email string, name string, passwordHash string, codeHash string, expiresAt time.Time) error
+	CustomerByRegistrationCode(email string, codeHash string, now time.Time) (models.CustomerUser, error)
+	DeleteCustomerRegistrationCode(email string) error
+	SaveCustomerPasswordResetCode(email string, codeHash string, expiresAt time.Time) error
+	UpdateCustomerPasswordByResetCode(email string, codeHash string, passwordHash string, now time.Time) (models.CustomerUser, error)
+	DeleteCustomerPasswordResetCode(email string) error
+	CreateCustomerSession(session models.CustomerSession, expiresAt time.Time) error
+	CustomerSession(sessionID string, now time.Time) (models.CustomerSession, error)
+	DeleteCustomerSession(sessionID string) error
+	DeleteExpiredCustomerSessions(now time.Time) error
 }
