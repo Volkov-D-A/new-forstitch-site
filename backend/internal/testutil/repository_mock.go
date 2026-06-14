@@ -1,4 +1,5 @@
-package repository
+// Package testutil contains stateful mocks shared by backend tests.
+package testutil
 
 import (
 	"fmt"
@@ -6,16 +7,21 @@ import (
 	"time"
 
 	"new-forstitch-site/backend/internal/models"
+	"new-forstitch-site/backend/internal/repository"
 )
 
-type MemoryRepository struct {
+// RepositoryMock is a stateful repository test double. It is intentionally
+// outside the production repository package and is imported only by tests.
+type RepositoryMock struct {
+	repository.Repository
+
 	mu                sync.RWMutex
 	adminUsers        []models.AdminUser
 	sessions          map[string]models.AdminSession
 	customers         []models.CustomerUser
 	customerSessions  map[string]models.CustomerSession
-	registrationCodes map[string]memoryRegistrationCode
-	resetCodes        map[string]memoryPasswordResetCode
+	registrationCodes map[string]registrationCodeState
+	resetCodes        map[string]passwordResetCodeState
 	categories        []models.Category
 	products          []models.Product
 	gallery           []models.GalleryItem
@@ -24,24 +30,26 @@ type MemoryRepository struct {
 	orders            []models.Order
 }
 
-type memoryRegistrationCode struct {
+var _ repository.Repository = (*RepositoryMock)(nil)
+
+type registrationCodeState struct {
 	Name         string
 	PasswordHash string
 	CodeHash     string
 	ExpiresAt    time.Time
 }
 
-type memoryPasswordResetCode struct {
+type passwordResetCodeState struct {
 	CodeHash  string
 	ExpiresAt time.Time
 }
 
-func NewMemoryRepository() *MemoryRepository {
-	return &MemoryRepository{
+func NewRepositoryMock() *RepositoryMock {
+	return &RepositoryMock{
 		sessions:          map[string]models.AdminSession{},
 		customerSessions:  map[string]models.CustomerSession{},
-		registrationCodes: map[string]memoryRegistrationCode{},
-		resetCodes:        map[string]memoryPasswordResetCode{},
+		registrationCodes: map[string]registrationCodeState{},
+		resetCodes:        map[string]passwordResetCodeState{},
 		categories: []models.Category{
 			{ID: "fauna", Label: "Животный мир"},
 			{ID: "people", Label: "Люди"},
@@ -147,13 +155,13 @@ func NewMemoryRepository() *MemoryRepository {
 	}
 }
 
-func (s *MemoryRepository) Categories() []models.Category {
+func (s *RepositoryMock) Categories() []models.Category {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return clone(s.categories)
 }
 
-func (s *MemoryRepository) CreateCategory(category models.Category) error {
+func (s *RepositoryMock) CreateCategory(category models.Category) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -166,12 +174,13 @@ func (s *MemoryRepository) CreateCategory(category models.Category) error {
 	return nil
 }
 
-func (s *MemoryRepository) UpdateCategory(id string, category models.Category) error {
+func (s *RepositoryMock) UpdateCategory(id string, category models.Category) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	for index, item := range s.categories {
 		if item.ID == id {
+			category.ID = id
 			s.categories[index] = category
 			return nil
 		}
@@ -179,7 +188,7 @@ func (s *MemoryRepository) UpdateCategory(id string, category models.Category) e
 	return models.NotFound("category_not_found", "category not found")
 }
 
-func (s *MemoryRepository) DeleteCategory(id string) error {
+func (s *RepositoryMock) DeleteCategory(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -188,8 +197,8 @@ func (s *MemoryRepository) DeleteCategory(id string) error {
 			return models.Conflict("category_has_products", "category has products")
 		}
 	}
-	for index, item := range s.categories {
-		if item.ID == id {
+	for index, category := range s.categories {
+		if category.ID == id {
 			s.categories = append(s.categories[:index], s.categories[index+1:]...)
 			return nil
 		}
@@ -197,13 +206,13 @@ func (s *MemoryRepository) DeleteCategory(id string) error {
 	return models.NotFound("category_not_found", "category not found")
 }
 
-func (s *MemoryRepository) Products() []models.Product {
+func (s *RepositoryMock) Products() []models.Product {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return markLatestProducts(clone(s.products))
 }
 
-func (s *MemoryRepository) Product(id string) (models.Product, error) {
+func (s *RepositoryMock) Product(id string) (models.Product, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -215,7 +224,7 @@ func (s *MemoryRepository) Product(id string) (models.Product, error) {
 	return models.Product{}, models.NotFound("product_not_found", "product not found")
 }
 
-func (s *MemoryRepository) CreateProduct(product models.Product) error {
+func (s *RepositoryMock) CreateProduct(product models.Product) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -228,12 +237,13 @@ func (s *MemoryRepository) CreateProduct(product models.Product) error {
 	return nil
 }
 
-func (s *MemoryRepository) UpdateProduct(id string, product models.Product) error {
+func (s *RepositoryMock) UpdateProduct(id string, product models.Product) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	for index, item := range s.products {
 		if item.ID == id {
+			product.ID = id
 			product.Images = item.Images
 			product.Files = item.Files
 			s.products[index] = product
@@ -250,7 +260,7 @@ func markLatestProducts(products []models.Product) []models.Product {
 	return products
 }
 
-func (s *MemoryRepository) UpdateProductImage(id string, imageURL string) error {
+func (s *RepositoryMock) UpdateProductImage(id string, imageURL string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -263,7 +273,7 @@ func (s *MemoryRepository) UpdateProductImage(id string, imageURL string) error 
 	return models.NotFound("product_not_found", "product not found")
 }
 
-func (s *MemoryRepository) AddProductImage(productID string, imageURL string) (models.ProductImage, error) {
+func (s *RepositoryMock) AddProductImage(productID string, imageURL string) (models.ProductImage, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -277,7 +287,7 @@ func (s *MemoryRepository) AddProductImage(productID string, imageURL string) (m
 	return models.ProductImage{}, models.NotFound("product_not_found", "product not found")
 }
 
-func (s *MemoryRepository) DeleteProductImage(productID string, imageID int64) error {
+func (s *RepositoryMock) DeleteProductImage(productID string, imageID int64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -296,7 +306,7 @@ func (s *MemoryRepository) DeleteProductImage(productID string, imageID int64) e
 	return models.NotFound("product_not_found", "product not found")
 }
 
-func (s *MemoryRepository) AddProductFile(productID string, name string, objectName string) (models.ProductFile, error) {
+func (s *RepositoryMock) AddProductFile(productID string, name string, objectName string) (models.ProductFile, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -314,7 +324,7 @@ func (s *MemoryRepository) AddProductFile(productID string, name string, objectN
 	return models.ProductFile{}, models.NotFound("product_not_found", "product not found")
 }
 
-func (s *MemoryRepository) DeleteProductFile(productID string, fileID int64) error {
+func (s *RepositoryMock) DeleteProductFile(productID string, fileID int64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -333,7 +343,7 @@ func (s *MemoryRepository) DeleteProductFile(productID string, fileID int64) err
 	return models.NotFound("product_not_found", "product not found")
 }
 
-func (s *MemoryRepository) ProductFileForCustomerOrder(orderID string, _ int64, fileID int64) (models.ProductFile, error) {
+func (s *RepositoryMock) ProductFileForCustomerOrder(orderID string, _ int64, fileID int64) (models.ProductFile, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -357,12 +367,12 @@ func (s *MemoryRepository) ProductFileForCustomerOrder(orderID string, _ int64, 
 	return models.ProductFile{}, models.NotFound("product_file_not_found", "product file not found")
 }
 
-func (s *MemoryRepository) DeleteProduct(id string) error {
+func (s *RepositoryMock) DeleteProduct(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for index, item := range s.products {
-		if item.ID == id {
+	for index, product := range s.products {
+		if product.ID == id {
 			s.products = append(s.products[:index], s.products[index+1:]...)
 			return nil
 		}
@@ -370,13 +380,7 @@ func (s *MemoryRepository) DeleteProduct(id string) error {
 	return models.NotFound("product_not_found", "product not found")
 }
 
-func (s *MemoryRepository) Gallery() []models.GalleryItem {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return clone(s.gallery)
-}
-
-func (s *MemoryRepository) CreateGalleryItem(item models.GalleryItem) (models.GalleryItem, error) {
+func (s *RepositoryMock) CreateGalleryItem(item models.GalleryItem) (models.GalleryItem, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var maxID int64
@@ -390,9 +394,16 @@ func (s *MemoryRepository) CreateGalleryItem(item models.GalleryItem) (models.Ga
 	return item, nil
 }
 
-func (s *MemoryRepository) UpdateGalleryItem(id int64, item models.GalleryItem) error {
+func (s *RepositoryMock) Gallery() []models.GalleryItem {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return clone(s.gallery)
+}
+
+func (s *RepositoryMock) UpdateGalleryItem(id int64, item models.GalleryItem) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	for index, existing := range s.gallery {
 		if existing.ID == id {
 			item.ID = id
@@ -403,9 +414,10 @@ func (s *MemoryRepository) UpdateGalleryItem(id int64, item models.GalleryItem) 
 	return models.NotFound("gallery_item_not_found", "gallery item not found")
 }
 
-func (s *MemoryRepository) UpdateGalleryItemImage(id int64, imageURL string) error {
+func (s *RepositoryMock) UpdateGalleryItemImage(id int64, imageURL string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	for index, item := range s.gallery {
 		if item.ID == id {
 			s.gallery[index].Img = imageURL
@@ -415,9 +427,10 @@ func (s *MemoryRepository) UpdateGalleryItemImage(id int64, imageURL string) err
 	return models.NotFound("gallery_item_not_found", "gallery item not found")
 }
 
-func (s *MemoryRepository) DeleteGalleryItem(id int64) error {
+func (s *RepositoryMock) DeleteGalleryItem(id int64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	for index, item := range s.gallery {
 		if item.ID == id {
 			s.gallery = append(s.gallery[:index], s.gallery[index+1:]...)
@@ -427,13 +440,7 @@ func (s *MemoryRepository) DeleteGalleryItem(id int64) error {
 	return models.NotFound("gallery_item_not_found", "gallery item not found")
 }
 
-func (s *MemoryRepository) Blog() []models.BlogPost {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return clone(s.blog)
-}
-
-func (s *MemoryRepository) CreateBlogPost(post models.BlogPost) (models.BlogPost, error) {
+func (s *RepositoryMock) CreateBlogPost(post models.BlogPost) (models.BlogPost, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -446,7 +453,13 @@ func (s *MemoryRepository) CreateBlogPost(post models.BlogPost) (models.BlogPost
 	return post, nil
 }
 
-func (s *MemoryRepository) UpdateBlogPost(id string, post models.BlogPost) error {
+func (s *RepositoryMock) Blog() []models.BlogPost {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return clone(s.blog)
+}
+
+func (s *RepositoryMock) UpdateBlogPost(id string, post models.BlogPost) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -460,7 +473,7 @@ func (s *MemoryRepository) UpdateBlogPost(id string, post models.BlogPost) error
 	return models.NotFound("blog_post_not_found", "blog post not found")
 }
 
-func (s *MemoryRepository) UpdateBlogPostImage(id string, imageURL string) error {
+func (s *RepositoryMock) UpdateBlogPostImage(id string, imageURL string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -473,7 +486,7 @@ func (s *MemoryRepository) UpdateBlogPostImage(id string, imageURL string) error
 	return models.NotFound("blog_post_not_found", "blog post not found")
 }
 
-func (s *MemoryRepository) DeleteBlogPost(id string) error {
+func (s *RepositoryMock) DeleteBlogPost(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -486,19 +499,19 @@ func (s *MemoryRepository) DeleteBlogPost(id string) error {
 	return models.NotFound("blog_post_not_found", "blog post not found")
 }
 
-func (s *MemoryRepository) SiteContent() models.SiteContent {
+func (s *RepositoryMock) SiteContent() models.SiteContent {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.siteContent
 }
 
-func (s *MemoryRepository) Testimonials() []models.Testimonial {
+func (s *RepositoryMock) Testimonials() []models.Testimonial {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return clone(s.siteContent.Testimonials)
 }
 
-func (s *MemoryRepository) CreateTestimonial(testimonial models.Testimonial) (models.Testimonial, error) {
+func (s *RepositoryMock) CreateTestimonial(testimonial models.Testimonial) (models.Testimonial, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -513,7 +526,7 @@ func (s *MemoryRepository) CreateTestimonial(testimonial models.Testimonial) (mo
 	return testimonial, nil
 }
 
-func (s *MemoryRepository) UpdateTestimonial(id int64, testimonial models.Testimonial) error {
+func (s *RepositoryMock) UpdateTestimonial(id int64, testimonial models.Testimonial) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -527,7 +540,7 @@ func (s *MemoryRepository) UpdateTestimonial(id int64, testimonial models.Testim
 	return models.NotFound("testimonial_not_found", "testimonial not found")
 }
 
-func (s *MemoryRepository) UpdateTestimonialImage(id int64, imageURL string) error {
+func (s *RepositoryMock) UpdateTestimonialImage(id int64, imageURL string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -540,27 +553,30 @@ func (s *MemoryRepository) UpdateTestimonialImage(id int64, imageURL string) err
 	return models.NotFound("testimonial_not_found", "testimonial not found")
 }
 
-func (s *MemoryRepository) DeleteTestimonial(id int64) error {
+func (s *RepositoryMock) DeleteTestimonial(id int64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	for index, item := range s.siteContent.Testimonials {
 		if item.ID == id {
-			s.siteContent.Testimonials = append(s.siteContent.Testimonials[:index], s.siteContent.Testimonials[index+1:]...)
+			s.siteContent.Testimonials = append(
+				s.siteContent.Testimonials[:index],
+				s.siteContent.Testimonials[index+1:]...,
+			)
 			return nil
 		}
 	}
 	return models.NotFound("testimonial_not_found", "testimonial not found")
 }
 
-func (s *MemoryRepository) UpdateSiteSettings(settings models.SiteSettings) error {
+func (s *RepositoryMock) UpdateSiteSettings(settings models.SiteSettings) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.siteContent.FeaturedProductID = settings.FeaturedProductID
 	return nil
 }
 
-func (s *MemoryRepository) CreateOrder(req models.OrderRequest, customer models.CustomerUser) (models.OrderResponse, error) {
+func (s *RepositoryMock) CreateOrder(req models.OrderRequest, customer models.CustomerUser) (models.OrderResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -599,19 +615,19 @@ func (s *MemoryRepository) CreateOrder(req models.OrderRequest, customer models.
 	return models.OrderResponse{ID: orderID, Status: order.Status, Message: order.Message}, nil
 }
 
-func (s *MemoryRepository) Orders() ([]models.Order, error) {
+func (s *RepositoryMock) CustomerOrders(_ int64) ([]models.Order, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return append([]models.Order(nil), s.orders...), nil
 }
 
-func (s *MemoryRepository) CustomerOrders(_ int64) ([]models.Order, error) {
+func (s *RepositoryMock) Orders() ([]models.Order, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return append([]models.Order(nil), s.orders...), nil
 }
 
-func (s *MemoryRepository) OrderForCustomer(orderID string, _ int64) (models.Order, error) {
+func (s *RepositoryMock) OrderForCustomer(orderID string, _ int64) (models.Order, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, order := range s.orders {
@@ -622,7 +638,7 @@ func (s *MemoryRepository) OrderForCustomer(orderID string, _ int64) (models.Ord
 	return models.Order{}, models.NotFound("order_not_found", "order not found")
 }
 
-func (s *MemoryRepository) productPrice(productID string) int {
+func (s *RepositoryMock) productPrice(productID string) int {
 	for _, product := range s.products {
 		if product.ID == productID {
 			return product.Price
@@ -631,7 +647,7 @@ func (s *MemoryRepository) productPrice(productID string) int {
 	return 0
 }
 
-func (s *MemoryRepository) AdminUserByUsername(username string) (models.AdminUser, error) {
+func (s *RepositoryMock) AdminUserByUsername(username string) (models.AdminUser, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -643,7 +659,7 @@ func (s *MemoryRepository) AdminUserByUsername(username string) (models.AdminUse
 	return models.AdminUser{}, models.NotFound("admin_user_not_found", "admin user not found")
 }
 
-func (s *MemoryRepository) EnsureAdminUser(username string, passwordHash string) error {
+func (s *RepositoryMock) EnsureAdminUser(username string, passwordHash string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -661,7 +677,7 @@ func (s *MemoryRepository) EnsureAdminUser(username string, passwordHash string)
 	return nil
 }
 
-func (s *MemoryRepository) CreateAdminSession(session models.AdminSession, _ time.Time) error {
+func (s *RepositoryMock) CreateAdminSession(session models.AdminSession, _ time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -669,7 +685,7 @@ func (s *MemoryRepository) CreateAdminSession(session models.AdminSession, _ tim
 	return nil
 }
 
-func (s *MemoryRepository) AdminSession(sessionID string, _ time.Time) (models.AdminSession, error) {
+func (s *RepositoryMock) AdminSession(sessionID string, _ time.Time) (models.AdminSession, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -680,7 +696,7 @@ func (s *MemoryRepository) AdminSession(sessionID string, _ time.Time) (models.A
 	return session, nil
 }
 
-func (s *MemoryRepository) DeleteAdminSession(sessionID string) error {
+func (s *RepositoryMock) DeleteAdminSession(sessionID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -688,11 +704,11 @@ func (s *MemoryRepository) DeleteAdminSession(sessionID string) error {
 	return nil
 }
 
-func (s *MemoryRepository) DeleteExpiredAdminSessions(_ time.Time) error {
+func (s *RepositoryMock) DeleteExpiredAdminSessions(_ time.Time) error {
 	return nil
 }
 
-func (s *MemoryRepository) CustomerByEmail(email string) (models.CustomerUser, error) {
+func (s *RepositoryMock) CustomerByEmail(email string) (models.CustomerUser, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -704,7 +720,7 @@ func (s *MemoryRepository) CustomerByEmail(email string) (models.CustomerUser, e
 	return models.CustomerUser{}, models.NotFound("customer_not_found", "customer not found")
 }
 
-func (s *MemoryRepository) EnsureCustomer(email string, name string, passwordHash string) (models.CustomerUser, bool, error) {
+func (s *RepositoryMock) EnsureCustomer(email string, name string, passwordHash string) (models.CustomerUser, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -727,11 +743,11 @@ func (s *MemoryRepository) EnsureCustomer(email string, name string, passwordHas
 	return user, true, nil
 }
 
-func (s *MemoryRepository) SaveCustomerRegistrationCode(email string, name string, passwordHash string, codeHash string, expiresAt time.Time) error {
+func (s *RepositoryMock) SaveCustomerRegistrationCode(email string, name string, passwordHash string, codeHash string, expiresAt time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.registrationCodes[email] = memoryRegistrationCode{
+	s.registrationCodes[email] = registrationCodeState{
 		Name:         name,
 		PasswordHash: passwordHash,
 		CodeHash:     codeHash,
@@ -740,7 +756,7 @@ func (s *MemoryRepository) SaveCustomerRegistrationCode(email string, name strin
 	return nil
 }
 
-func (s *MemoryRepository) CustomerByRegistrationCode(email string, codeHash string, now time.Time) (models.CustomerUser, error) {
+func (s *RepositoryMock) CustomerByRegistrationCode(email string, codeHash string, now time.Time) (models.CustomerUser, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -768,7 +784,7 @@ func (s *MemoryRepository) CustomerByRegistrationCode(email string, codeHash str
 	return user, nil
 }
 
-func (s *MemoryRepository) DeleteCustomerRegistrationCode(email string) error {
+func (s *RepositoryMock) DeleteCustomerRegistrationCode(email string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -776,15 +792,15 @@ func (s *MemoryRepository) DeleteCustomerRegistrationCode(email string) error {
 	return nil
 }
 
-func (s *MemoryRepository) SaveCustomerPasswordResetCode(email string, codeHash string, expiresAt time.Time) error {
+func (s *RepositoryMock) SaveCustomerPasswordResetCode(email string, codeHash string, expiresAt time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.resetCodes[email] = memoryPasswordResetCode{CodeHash: codeHash, ExpiresAt: expiresAt}
+	s.resetCodes[email] = passwordResetCodeState{CodeHash: codeHash, ExpiresAt: expiresAt}
 	return nil
 }
 
-func (s *MemoryRepository) UpdateCustomerPasswordByResetCode(email string, codeHash string, passwordHash string, now time.Time) (models.CustomerUser, error) {
+func (s *RepositoryMock) UpdateCustomerPasswordByResetCode(email string, codeHash string, passwordHash string, now time.Time) (models.CustomerUser, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -803,7 +819,7 @@ func (s *MemoryRepository) UpdateCustomerPasswordByResetCode(email string, codeH
 	return models.CustomerUser{}, models.NotFound("customer_not_found", "customer not found")
 }
 
-func (s *MemoryRepository) DeleteCustomerPasswordResetCode(email string) error {
+func (s *RepositoryMock) DeleteCustomerPasswordResetCode(email string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -811,7 +827,7 @@ func (s *MemoryRepository) DeleteCustomerPasswordResetCode(email string) error {
 	return nil
 }
 
-func (s *MemoryRepository) CreateCustomerSession(session models.CustomerSession, _ time.Time) error {
+func (s *RepositoryMock) CreateCustomerSession(session models.CustomerSession, _ time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -819,7 +835,7 @@ func (s *MemoryRepository) CreateCustomerSession(session models.CustomerSession,
 	return nil
 }
 
-func (s *MemoryRepository) CustomerSession(sessionID string, _ time.Time) (models.CustomerSession, error) {
+func (s *RepositoryMock) CustomerSession(sessionID string, _ time.Time) (models.CustomerSession, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -830,7 +846,7 @@ func (s *MemoryRepository) CustomerSession(sessionID string, _ time.Time) (model
 	return session, nil
 }
 
-func (s *MemoryRepository) DeleteCustomerSession(sessionID string) error {
+func (s *RepositoryMock) DeleteCustomerSession(sessionID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -838,7 +854,7 @@ func (s *MemoryRepository) DeleteCustomerSession(sessionID string) error {
 	return nil
 }
 
-func (s *MemoryRepository) DeleteExpiredCustomerSessions(_ time.Time) error {
+func (s *RepositoryMock) DeleteExpiredCustomerSessions(_ time.Time) error {
 	return nil
 }
 

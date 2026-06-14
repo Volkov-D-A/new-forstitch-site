@@ -37,24 +37,34 @@ ADMIN_PASSWORD=dimas
 
 ## Миграции
 
+SQL-файлы лежат в `internal/db/migrations`, встраиваются в бинарник и
+автоматически применяются при старте `cmd/api`.
+
+## Интеграционные тесты PostgreSQL
+
+Тесты используют отдельную базу `forstitch_test` в текущем PostgreSQL-контейнере.
+Каждый запуск пересоздаёт только эту базу, применяет миграции и запускает тесты
+с build tag `integration`:
+
 ```bash
-go run ./cmd/migrate
+make go-integration-test
 ```
 
-SQL-файлы лежат в `internal/db/migrations`.
+Основная база из `DATABASE_URL` не изменяется. Имя и строку подключения тестовой
+базы можно переопределить через `TEST_DATABASE_NAME` и `TEST_DATABASE_URL`.
 
 ## Архитектура
 
 Backend разложен по слоям:
 
 - `internal/models` — доменные модели и JSON-контракты.
-- `internal/repository` — интерфейсы хранилища и реализации PostgreSQL/in-memory.
+- `internal/repository` — интерфейсы хранилища и реализация PostgreSQL.
+- `internal/testutil` — тестовые doubles, которые не подключаются к runtime-сборке API.
 - `internal/services` — бизнес-логика, валидация и сценарии приложения.
 - `internal/storage` — файловое хранилище MinIO.
 - `internal/api` — HTTP transport: роутинг, auth middleware, JSON request/response.
 - `internal/db` — подключение к БД и миграции.
 - `cmd/api` — сборка зависимостей и запуск HTTP API.
-- `cmd/migrate` — отдельный запуск миграций.
 
 Новый код стоит добавлять по этому направлению: сначала модель/репозиторий, затем service-метод, затем HTTP handler.
 
@@ -289,6 +299,5 @@ FILE_BASE_URL=http://localhost:3000/api/files
 
 ```bash
 go test ./...
-go run ./cmd/migrate
 go run ./cmd/api
 ```

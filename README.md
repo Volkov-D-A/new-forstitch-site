@@ -13,6 +13,9 @@ make release-gate
 завершается с ошибкой, выводится ее полный лог, а дальнейшие проверки не
 запускаются.
 
+Release gate включает интеграционные тесты PostgreSQL, поэтому для него должен
+быть доступен Docker. Пересоздаётся только тестовая база `forstitch_test`.
+
 ## Frontend
 
 ```bash
@@ -48,11 +51,11 @@ docker compose up -d
 
 ```bash
 make services-start
-make db-migrate
 make services-stop
 make services-reset
 make backend-run
 make frontend-run
+make go-integration-test
 ```
 
 Локальная строка подключения:
@@ -60,6 +63,9 @@ make frontend-run
 ```bash
 postgres://forstitch:forstitch@localhost:5432/forstitch?sslmode=disable
 ```
+
+`make go-integration-test` пересоздаёт отдельную базу `forstitch_test` в том же
+PostgreSQL-контейнере и не изменяет основную локальную базу.
 
 ## File Storage
 
