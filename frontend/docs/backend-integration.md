@@ -7,7 +7,7 @@
 - `src/types/site.ts` — общий контракт UI и API.
 - `src/hooks/useCart.ts` — клиентская корзина в формате позиций `{ productId, quantity }`.
 
-Фронтенд всегда обращается к Go API по адресу `http://localhost:3000/api`.
+Фронтенд обращается к Go API по относительному адресу `/api`. В режиме разработки Vite проксирует запросы на `http://localhost:3000`.
 
 ## API URL
 

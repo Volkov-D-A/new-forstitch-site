@@ -1,59 +1,59 @@
 services:
   postgres:
-    image: postgres:16-alpine
-    container_name: forstitch-postgres
-    restart: unless-stopped
+    image: ${POSTGRES_IMAGE}:${POSTGRES_IMAGE_VERSION}
+    container_name: ${POSTGRES_CONTAINER_NAME}
+    restart: ${RESTART_POLICY}
     environment:
-      POSTGRES_DB: forstitch
-      POSTGRES_USER: forstitch
-      POSTGRES_PASSWORD: forstitch
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U forstitch -d forstitch"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: ${HEALTHCHECK_INTERVAL}
+      timeout: ${HEALTHCHECK_TIMEOUT}
+      retries: ${HEALTHCHECK_RETRIES}
 
   minio:
-    image: quay.io/minio/minio:latest
-    container_name: forstitch-minio
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
+    image: ${MINIO_IMAGE}:${MINIO_IMAGE_VERSION}
+    container_name: ${MINIO_CONTAINER_NAME}
+    restart: ${RESTART_POLICY}
+    command: server /data --console-address ":${MINIO_CONSOLE_INTERNAL_PORT}"
     environment:
-      MINIO_ROOT_USER: forstitch
-      MINIO_ROOT_PASSWORD: forstitch-secret
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${MINIO_API_PORT}:${MINIO_API_INTERNAL_PORT}"
+      - "${MINIO_CONSOLE_PORT}:${MINIO_CONSOLE_INTERNAL_PORT}"
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      test: ["CMD", "curl", "-f", "http://localhost:${MINIO_API_INTERNAL_PORT}/minio/health/live"]
+      interval: ${HEALTHCHECK_INTERVAL}
+      timeout: ${HEALTHCHECK_TIMEOUT}
+      retries: ${HEALTHCHECK_RETRIES}
 
   minio-init:
-    image: quay.io/minio/mc:latest
+    image: ${MINIO_MC_IMAGE}:${MINIO_MC_IMAGE_VERSION}
     depends_on:
       minio:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://minio:9000 forstitch forstitch-secret &&
-      mc mb --ignore-existing local/forstitch
+      mc alias set local http://minio:${MINIO_API_INTERNAL_PORT} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} &&
+      mc mb --ignore-existing local/${MINIO_BUCKET}
       "
 
   mailpit:
-    image: axllent/mailpit:latest
-    container_name: forstitch-mailpit
-    restart: unless-stopped
+    image: ${MAILPIT_IMAGE}:${MAILPIT_IMAGE_VERSION}
+    container_name: ${MAILPIT_CONTAINER_NAME}
+    restart: ${RESTART_POLICY}
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "${MAILPIT_SMTP_PORT}:${MAILPIT_SMTP_INTERNAL_PORT}"
+      - "${MAILPIT_WEB_PORT}:${MAILPIT_WEB_INTERNAL_PORT}"
 
 volumes:
   postgres_data:

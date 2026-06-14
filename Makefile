@@ -1,63 +1,98 @@
+include .env
+export
+
 COMPOSE := docker compose
-DB_SERVICE := postgres
-STORAGE_SERVICE := minio
-MAIL_SERVICE := mailpit
-STORAGE_VOLUME := new-forstitch-site_minio_data
-DATABASE_URL ?= postgres://forstitch:forstitch@localhost:5432/forstitch?sslmode=disable
 GOCACHE ?= /tmp/go-build-cache
 GOMODCACHE ?= /tmp/go-mod-cache
-ADMIN_USERNAME ?= dimas
-ADMIN_PASSWORD ?= dimas
-CORS_ALLOWED_ORIGINS ?= http://localhost:5173,http://127.0.0.1:5173
-MINIO_ENDPOINT ?= localhost:9000
-MINIO_ACCESS_KEY ?= forstitch
-MINIO_SECRET_KEY ?= forstitch-secret
-MINIO_BUCKET ?= forstitch
-MINIO_USE_SSL ?= false
-FILE_BASE_URL ?= http://localhost:3000/api/files
-APP_BASE_URL ?= http://localhost:3000
-MAIL_ENABLED ?= true
-MAIL_HOST ?= localhost
-MAIL_PORT ?= 1025
-MAIL_USERNAME ?=
-MAIL_PASSWORD ?=
-MAIL_FROM ?= no-reply@forstitch.local
-MAIL_FROM_NAME ?= Forstitch
+BACKEND_IMAGE := $(if $(strip $(DOCKERHUB_USER)),$(DOCKERHUB_USER)/,)forstitch-backend:$(APP_VERSION)
+FRONTEND_IMAGE := $(if $(strip $(DOCKERHUB_USER)),$(DOCKERHUB_USER)/,)forstitch-frontend:$(APP_VERSION)
+RELEASE_CHECKS := go-test go-vet govulncheck frontend-ci frontend-build frontend-lint frontend-test npm-audit
 
-.PHONY: backend-run db-migrate db-reset db-start db-stop frontend-run mail-start mail-stop storage-reset storage-start storage-stop
+.PHONY: backend-image-build backend-image-push backend-run db-migrate frontend-build frontend-ci frontend-image-build frontend-image-push frontend-lint frontend-run frontend-test go-test go-vet govulncheck npm-audit release-gate services-reset services-start services-stop
 
-db-start:
-	$(COMPOSE) up -d $(DB_SERVICE)
+define run-check
+	@log="$$(mktemp)"; \
+	if $(1) >"$$log" 2>&1; then \
+		printf "%-18s ok\n" "$(2):"; \
+		rm -f "$$log"; \
+	else \
+		status=$$?; \
+		printf "%-18s failed\n\n" "$(2):" >&2; \
+		cat "$$log" >&2; \
+		rm -f "$$log"; \
+		exit $$status; \
+	fi
+endef
 
-db-stop:
-	$(COMPOSE) stop $(DB_SERVICE)
+services-start:
+	$(COMPOSE) up -d
 
-db-reset:
+services-stop:
+	$(COMPOSE) stop
+
+services-reset:
 	$(COMPOSE) down -v
-	$(COMPOSE) up -d $(DB_SERVICE)
-
-storage-start:
-	$(COMPOSE) up -d $(STORAGE_SERVICE) minio-init
-
-storage-stop:
-	$(COMPOSE) stop $(STORAGE_SERVICE)
-
-storage-reset:
-	$(COMPOSE) stop $(STORAGE_SERVICE) minio-init
-	docker volume rm $(STORAGE_VOLUME)
-	$(COMPOSE) up -d $(STORAGE_SERVICE) minio-init
-
-mail-start:
-	$(COMPOSE) up -d $(MAIL_SERVICE)
-
-mail-stop:
-	$(COMPOSE) stop $(MAIL_SERVICE)
+	$(COMPOSE) up -d
 
 db-migrate:
-	cd backend && GOCACHE="$(GOCACHE)" GOMODCACHE="$(GOMODCACHE)" DATABASE_URL="$(DATABASE_URL)" go run ./cmd/migrate
+	cd backend && go run ./cmd/migrate
 
-backend-run: mail-start
-	cd backend && GOCACHE="$(GOCACHE)" GOMODCACHE="$(GOMODCACHE)" DATABASE_URL="$(DATABASE_URL)" ADMIN_USERNAME="$(ADMIN_USERNAME)" ADMIN_PASSWORD="$(ADMIN_PASSWORD)" CORS_ALLOWED_ORIGINS="$(CORS_ALLOWED_ORIGINS)" MINIO_ENDPOINT="$(MINIO_ENDPOINT)" MINIO_ACCESS_KEY="$(MINIO_ACCESS_KEY)" MINIO_SECRET_KEY="$(MINIO_SECRET_KEY)" MINIO_BUCKET="$(MINIO_BUCKET)" MINIO_USE_SSL="$(MINIO_USE_SSL)" FILE_BASE_URL="$(FILE_BASE_URL)" APP_BASE_URL="$(APP_BASE_URL)" MAIL_ENABLED="$(MAIL_ENABLED)" MAIL_HOST="$(MAIL_HOST)" MAIL_PORT="$(MAIL_PORT)" MAIL_USERNAME="$(MAIL_USERNAME)" MAIL_PASSWORD="$(MAIL_PASSWORD)" MAIL_FROM="$(MAIL_FROM)" MAIL_FROM_NAME="$(MAIL_FROM_NAME)" go run ./cmd/api
+backend-run: services-start
+	cd backend && go run ./cmd/api
+
+backend-image-build:
+	docker build --tag "$(BACKEND_IMAGE)" backend
+
+backend-image-push:
+	@test -n "$(DOCKERHUB_USER)" || (echo "DOCKERHUB_USER is required" && exit 1)
+	@test -n "$(APP_VERSION)" || (echo "APP_VERSION is required" && exit 1)
+	docker buildx build \
+		--platform linux/amd64,linux/arm64 \
+		--tag "$(BACKEND_IMAGE)" \
+		--push \
+		backend
+
+frontend-image-build:
+	docker build --tag "$(FRONTEND_IMAGE)" frontend
+
+frontend-image-push:
+	@test -n "$(DOCKERHUB_USER)" || (echo "DOCKERHUB_USER is required" && exit 1)
+	@test -n "$(APP_VERSION)" || (echo "APP_VERSION is required" && exit 1)
+	docker buildx build \
+		--platform linux/amd64,linux/arm64 \
+		--tag "$(FRONTEND_IMAGE)" \
+		--push \
+		frontend
 
 frontend-run:
 	cd frontend && npm run dev -- --host 0.0.0.0
+
+go-test:
+	$(call run-check,cd backend && go test ./...,go-test)
+
+go-vet:
+	$(call run-check,cd backend && go vet ./...,go-vet)
+
+govulncheck:
+	$(call run-check,cd backend && govulncheck ./...,govulncheck)
+
+frontend-ci:
+	$(call run-check,cd frontend && npm ci,frontend-ci)
+
+frontend-build:
+	$(call run-check,cd frontend && npm run build,frontend-build)
+
+frontend-lint:
+	$(call run-check,cd frontend && npm run lint,frontend-lint)
+
+frontend-test:
+	$(call run-check,cd frontend && npm test,frontend-test)
+
+npm-audit:
+	$(call run-check,cd frontend && npm audit,npm-audit)
+
+release-gate:
+	@set -e; \
+	for check in $(RELEASE_CHECKS); do \
+		$(MAKE) --no-print-directory "$$check"; \
+	done

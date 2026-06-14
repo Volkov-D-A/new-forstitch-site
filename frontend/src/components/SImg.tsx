@@ -45,7 +45,7 @@ type SImgProps = Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src' | 'alt'> 
   alt?: string;
 };
 
-export function SImg({ src, alt, className, loading, ...rest }: SImgProps) {
+export function SImg({ src, alt, className, ...rest }: SImgProps) {
   const ref = React.useRef<HTMLImageElement | null>(null);
 
   React.useEffect(() => {

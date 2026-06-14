@@ -67,6 +67,17 @@ export function ProductPage({ data, formatPrice, addToCart, isInCart }: ProductP
   const navigate = useNavigate();
   const { productId } = useParams();
   const product = data.products.find((item) => item.id === productId);
+  const galleryImages = React.useMemo(() => {
+    if (!product) return [];
+    return [
+      ...(product.img ? [{ id: 0, url: product.img }] : []),
+      ...(product.images || []),
+    ];
+  }, [product]);
+  const [selectedImage, setSelectedImage] = React.useState({ productId: '', url: '' });
+  const activeImage = selectedImage.productId === product?.id
+    ? selectedImage.url
+    : galleryImages[0]?.url || '';
 
   if (!product) {
     return (
@@ -84,15 +95,6 @@ export function ProductPage({ data, formatPrice, addToCart, isInCart }: ProductP
     .slice(0, 4);
   const inCart = isInCart(product.id);
   const openProduct = (id: string) => navigate(productPath(id));
-  const galleryImages = [
-    ...(product.img ? [{ id: 0, url: product.img }] : []),
-    ...(product.images || []),
-  ];
-  const [activeImage, setActiveImage] = React.useState(galleryImages[0]?.url || '');
-
-  React.useEffect(() => {
-    setActiveImage(galleryImages[0]?.url || '');
-  }, [product.id]);
 
   return (
     <div data-screen-label={'Товар: ' + product.title}>
@@ -117,7 +119,7 @@ export function ProductPage({ data, formatPrice, addToCart, isInCart }: ProductP
                 <button
                   className={activeImage === image.url ? 'active' : ''}
                   key={image.id}
-                  onClick={() => setActiveImage(image.url)}
+                  onClick={() => setSelectedImage({ productId: product.id, url: image.url })}
                   type="button"
                 >
                   <SImg src={image.url} alt={product.title} />

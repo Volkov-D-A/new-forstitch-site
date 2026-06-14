@@ -252,7 +252,7 @@ curl -X POST http://localhost:3000/api/admin/gallery/1/image \
 Локально используется MinIO:
 
 ```bash
-make storage-start
+make services-start
 ```
 
 Переменные окружения:
@@ -283,7 +283,7 @@ FILE_BASE_URL=http://localhost:3000/api/files
 
 ## Подключение фронтенда
 
-Фронтенд захардкожен на `http://localhost:3000/api`, поэтому backend нужно запускать на порту `3000`.
+В режиме разработки Vite проксирует относительные запросы `/api` на backend по адресу `http://localhost:3000`.
 
 ## Проверка
 
